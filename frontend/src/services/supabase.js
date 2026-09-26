@@ -4,12 +4,8 @@
 // All data operations go through the FastAPI backend.
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!SUPABASE_URL || !SUPABASE_ANON) {
-  console.error('[supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set.')
-}
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL || 'https://dwzydxctpnspfhtzrzyz.supabase.co'
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_FDKPV6A_cTr7hTX6QI1Ofw_PgqipM0p'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
