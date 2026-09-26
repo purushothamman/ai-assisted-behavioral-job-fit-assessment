@@ -1,0 +1,58 @@
+# Environment variables — NEVER commit secrets
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+.npm
+*.tsbuildinfo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Supabase local
+.supabase/
+
+# OS
+Thumbs.db
+.DS_Store

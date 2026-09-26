@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+# Stub Supabase credentials so pydantic-settings doesn't fail at import time.
+# The actual Supabase client is mocked in conftest.py — these values are never
+# sent to a real Supabase instance.
+env = [
+    "SUPABASE_URL=https://test.supabase.co",
+    "SUPABASE_ANON_KEY=test_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY=test_service_role_key",
+    "APP_ENV=test",
+    "APP_SECRET_KEY=test_secret",
+]
