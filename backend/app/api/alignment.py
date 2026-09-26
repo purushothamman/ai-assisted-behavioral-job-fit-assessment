@@ -54,7 +54,7 @@ def _get_session_or_404(session_id: str, recruiter_id: str) -> dict:
         )
 
     # Ownership check
-    job = JobService().get_job(str(session["job_id"]))
+    job = JobService().get_job(str(session["job_id"]), recruiter_id)
     if not job or str(job.get("recruiter_id")) != recruiter_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -66,7 +66,7 @@ def _get_session_or_404(session_id: str, recruiter_id: str) -> dict:
 
 def _verify_job_ownership(job_id: str, recruiter_id: str) -> dict:
     """Verify job exists and belongs to the recruiter."""
-    job = JobService().get_job(job_id)
+    job = JobService().get_job(job_id, recruiter_id)
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

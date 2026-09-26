@@ -51,16 +51,14 @@ class JobService:
 
     # ── Read (single) ─────────────────────────────────────────────────────────
 
-    def get_job(self, job_id: str, recruiter_id: str) -> Optional[dict]:
+    def get_job(self, job_id: str, recruiter_id: Optional[str] = None) -> Optional[dict]:
         """Return a single job or None if not found / not owned by recruiter."""
-        result = (
-            self._db.table("jobs")
-            .select("*")
-            .eq("id", job_id)
-            .eq("recruiter_id", recruiter_id)
-            .maybe_single()
-            .execute()
-        )
+        query = self._db.table("jobs").select("*").eq("id", job_id)
+        if recruiter_id:
+            query = query.eq("recruiter_id", recruiter_id)
+        result = query.maybe_single().execute()
+        if result is None:
+            return None
         self._raise_if_error(result)
         return result.data
 

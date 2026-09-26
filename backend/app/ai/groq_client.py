@@ -75,6 +75,9 @@ def call_groq_json(
     client   = get_groq_client()
 
     req_model       = model       or settings.groq_model
+    # Automatic fallback for decommissioned models
+    if any(dep in req_model for dep in ["llama3-70b", "llama3-8b", "llama-3.3-70b", "llama-3.1-8b"]):
+        req_model = "openai/gpt-oss-120b"
     req_max_tokens  = max_tokens  or settings.groq_max_tokens
     req_temperature = temperature if temperature is not None else settings.groq_temperature
 

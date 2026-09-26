@@ -47,7 +47,7 @@ def _verify_session_access(session_id: str, recruiter_id: str) -> dict:
         )
 
     job_id = str(session["job_id"])
-    job = JobService().get_job(job_id)
+    job = JobService().get_job(job_id, recruiter_id)
     if not job or str(job.get("recruiter_id")) != recruiter_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -59,7 +59,7 @@ def _verify_session_access(session_id: str, recruiter_id: str) -> dict:
 
 def _verify_job_ownership(job_id: str, recruiter_id: str) -> dict:
     """Verify job exists and recruiter owns it."""
-    job = JobService().get_job(job_id)
+    job = JobService().get_job(job_id, recruiter_id)
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
-    # ── Groq (placeholder — used in Phase 3+) ────────────────────────────────
+    # ── Groq (used for JD analysis and question generation) ──────────────────
     groq_api_key: str = ""
-    groq_model: str = "llama3-70b-8192"
+    groq_model: str = "openai/gpt-oss-120b"
     groq_max_tokens: int = 2048
     groq_temperature: float = 0.3
 

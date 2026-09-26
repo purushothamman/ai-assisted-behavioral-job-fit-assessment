@@ -47,7 +47,7 @@ def _get_session_or_404(session_id: str, recruiter_id: str) -> dict:
 
     # Ownership: verify the job belongs to the recruiter
     from app.services.job_service import JobService
-    job = JobService().get_job(str(session["job_id"]))
+    job = JobService().get_job(str(session["job_id"]), recruiter_id)
     if not job or str(job.get("recruiter_id")) != recruiter_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
