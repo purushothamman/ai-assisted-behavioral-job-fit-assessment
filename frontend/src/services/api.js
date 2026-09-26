@@ -67,6 +67,14 @@ export const analysisApi = {
   updateRequirement:(jobId, reqId, payload)   => api.patch(`/api/jobs/${jobId}/requirements/${reqId}`, payload),
 };
 
+// ── Questions endpoints (Phase 4) ─────────────────────────────────────────────
+export const questionsApi = {
+  generate: (jobId)                      => api.post(`/api/jobs/${jobId}/questions/generate`),
+  list:     (jobId)                      => api.get(`/api/jobs/${jobId}/questions`),
+  update:   (questionId, jobId, payload) => api.patch(`/api/questions/${questionId}?job_id=${jobId}`, payload),
+  delete:   (questionId, jobId)          => api.delete(`/api/questions/${questionId}?job_id=${jobId}`),
+};
+
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {
   me:            ()        => api.get("/api/auth/me"),
