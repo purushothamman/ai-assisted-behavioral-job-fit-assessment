@@ -1004,6 +1004,18 @@ export default function JobDetailPage() {
                         >
                           {loadingAlignmentId === session.id ? '…' : '🎯 Alignment'}
                         </button>
+                        <button
+                          id={`btn-view-report-${session.id}`}
+                          onClick={() => navigate(`/jobs/${id}/sessions/${session.id}/report`)}
+                          style={btnStyle(
+                            'linear-gradient(135deg, #0ea5e9, #6366f1)',
+                            '#fff',
+                            '12px'
+                          )}
+                          title="Open Comprehensive Assessment Report"
+                        >
+                          📄 Full Report
+                        </button>
                       </>
                     )}
                     <button

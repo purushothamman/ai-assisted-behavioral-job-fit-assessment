@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Current Phase
-Phase 7 -- Job-Candidate Behavioral Alignment -- COMPLETE
+Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
 
 ## Completed
 ### Phase 0
@@ -138,51 +138,155 @@ Phase 7 -- Job-Candidate Behavioral Alignment -- COMPLETE
   - Integrated AlignmentModal display and error handling
 - [x] Frontend: Clean production build (81 modules, 0 errors)
 
+### Phase 8: Assessment Reports & Recruiter Dashboard
+- [x] Backend: app/schemas/report.py -- ReportEvidenceItem, ReportQuestionItem, ReportDimensionItem, ReportExecutiveSummary, AssessmentReportRead, SessionReportSummaryItem
+- [x] Backend: app/services/report_service.py:
+  - Aggregates session, job requirements, questions, responses, scores, and alignment deterministically
+  - Auto-calculates alignment if not yet persisted for completed & scored sessions
+  - Generates structured interview inquiry prompts for recruiter review
+  - Generates ethical compliance disclaimer (strictly decision-support; no automated hire/reject recommendations; no mental health diagnosis)
+  - Handles incomplete assessments and missing data safely
+- [x] Backend: app/api/reports.py -- 2 endpoints:
+  - GET /api/sessions/{session_id}/report (comprehensive explainable candidate assessment report)
+  - GET /api/jobs/{job_id}/reports/summary (summary roll-up of all candidate sessions for a job)
+  - Recruiter authentication & job ownership authorization enforced
+- [x] Backend: app/main.py updated -- reports router registered under /api
+- [x] Backend: tests/test_reports.py -- 9 tests:
+  - Full report generation for completed scored session
+  - Safety & handling of incomplete/unscored sessions
+  - Dynamic generation of tailored recruiter inquiry prompts
+  - Explicit non-diagnostic ethical disclaimer verification
+  - Recruiter authorization & 403 Forbidden for cross-recruiter access
+  - 404 handling for non-existent session
+  - Job-level session report summary roll-up
+- [x] Backend: ALL 170 TESTS PASSING (0 errors, 1 upstream warning)
+- [x] Frontend: services/api.js -- reportsApi added (getReport, getJobSummary)
+- [x] Frontend: pages/AssessmentReportPage.jsx -- CREATED:
+  - Executive summary card with overall alignment score gauge & formula badge
+  - Requirements vs. Candidate benchmark visualizer with side-by-side comparative bars and gap metrics
+  - Strengths & review areas with dynamic behavioral badges
+  - Recommended interview inquiry questions for deep-dive in live rounds
+  - Full question & response evidence transcript with collapsible accordions, detected indicators, confidence scores, and verbatim candidate quotes
+  - Incomplete / pending assessment safe fallback state
+  - Print-ready PDF stylesheet (@media print) with export button
+  - Prominent ethical non-decision & non-diagnostic compliance warning
+- [x] Frontend: App.jsx -- Registered `/jobs/:jobId/sessions/:sessionId/report` route
+- [x] Frontend: pages/JobDetailPage.jsx -- Added "📄 Full Report" button on completed candidate session rows
+- [x] Frontend: Clean production build (82 modules, 0 errors)
+
+### Phase 9: Evaluation, Fairness & System Validation -- COMPLETE
+- [x] Scoring & Alignment Validation:
+  - Verified 100% deterministic scoring calculations in Python (identical input produces identical score across repeated runs)
+  - Verified normalization boundaries [0, 100] and score clipping
+  - Verified mathematical alignment formula: sum(candidate_score * weight) / sum(weight) matches sum of dimension point contributions
+  - Handled boundary conditions: zero weights, negative weights (clamped to 0), float weights, division-by-zero safely
+- [x] Evidence Validation:
+  - Verified every scored response has supporting evidence records with similarity and discrete level tags
+  - Quality gate catches too_short, garbled, and empty answers, preventing false positive evidence
+  - Fixed indicator resolution fallback in `ScoringService.get_question_with_indicators` so custom/generated question indicators are never dropped
+- [x] Question Validation:
+  - Verified questions map to the 6 core behavioral dimensions
+  - Verified question coverage aligns with recruiter-confirmed requirements and weights
+  - Validated question length, types, and observable indicators via Pydantic
+- [x] Fairness & Safety Audit:
+  - Verified zero use of sensitive/protected personal characteristics (race, gender, age, religion, disability)
+  - Verified zero clinical or mental-health diagnostic terminology in prompts, schemas, reports, and calculators
+  - Verified system NEVER makes automated hire/reject/select decisions; strictly provides objective decision-support
+  - Mandatory ethical compliance disclaimer included on all assessment reports
+  - Verified recruiter human oversight remains required at all stages (requirement confirmation, question approval, assessment evaluation)
+- [x] Security Audit:
+  - Audited JWT authentication and recruiter authorization across all endpoints
+  - Verified recruiter tenant isolation: Recruiter B receives 403 Forbidden when attempting to access Recruiter A's jobs, sessions, scores, alignments, or reports
+  - Verified candidate token security: UUID access token; public endpoint returns only PublicSessionRead and never exposes recruiter IDs, weights, internal scores, or other candidate data
+  - Verified secrets/API keys are kept strictly in backend and never exposed to frontend
+- [x] Data Validation:
+  - Verified safe handling of missing dimensions (marked as 'missing' with 0 contribution and flagged in review areas)
+  - Verified handling of incomplete assessments, brief responses, and garbled text
+  - Verified duplicate submissions to completed sessions are blocked with 403 Forbidden
+  - Verified expired session links are blocked with 403 Forbidden
+- [x] Fixes Made:
+  1. `backend/app/services/report_service.py`: Fixed `_get_responses_by_session` query to select actual schema columns (`answer`, `created_at`) instead of non-existent columns (`response_text`, `submitted_at`), and supported both formats gracefully.
+  2. `backend/app/services/scoring_service.py`: Added fallback for custom/generated question indicators so they are preserved and scored even if not pre-seeded in the database table.
+  3. `backend/app/services/session_service.py`: Added missing `get_session(session_id)` method used by report verification.
+- [x] Tests:
+  - Added `backend/tests/test_validation_fairness.py` with 21 comprehensive audit tests
+  - ALL 191 BACKEND TESTS PASSING (100% green in 4.70s)
+  - Frontend production build verified (82 modules, 0 errors in 747ms)
+
+### Phase 10: Production Hardening & Final System Evaluation -- COMPLETE
+- [x] Production Security Hardening & Rate Limiting:
+  - Implemented thread-safe, sliding-window rate limiter in `backend/app/core/rate_limiter.py` with automatic timestamp pruning and RFC 6585 HTTP 429 Retry-After response
+  - Rate-limited public candidate assessment endpoints in `backend/app/api/sessions.py`:
+    - `GET /sessions/{token}`: 60 requests / minute per client IP
+    - `POST /sessions/{token}/responses`: 15 submissions / minute per client IP
+  - Reverse proxy IP resolution with `X-Forwarded-For` header support
+  - Bypassed in test environment by default for full test-runner velocity; isolated test suite verifies enforcement
+  - Re-verified tenant isolation: Recruiter B receives 403 Forbidden when attempting to access Recruiter A's resources
+  - Re-verified zero secret or API key leakage to the frontend
+- [x] Database Readiness:
+  - Fully verified `docs/supabase_schema.sql` (lines 622-805) covering Phase 5-7 tables (`interview_sessions`, `candidate_responses`, `response_scores`, `session_alignments`)
+  - Confirmed all primary keys, foreign keys, cascade deletes, unique constraints, and recruiter RLS policies are 100% aligned with application services
+  - Documented exact SQL migration steps for production deployment
+- [x] Reliability & Idempotency:
+  - Verified idempotent scoring (`POST /api/sessions/{session_id}/score` upserts on conflict `response_id`)
+  - Verified idempotent alignment calculation (`POST /api/sessions/{session_id}/alignment` upserts on conflict `session_id`)
+  - Verified idempotent assessment reporting (`GET /api/sessions/{session_id}/report` safely aggregates and auto-resolves alignment without side-effects)
+  - Verified candidate submission safety: completed sessions reject resubmission with 403 Forbidden ("This assessment has already been submitted")
+- [x] Performance & Resource Optimization:
+  - Embedding model (`all-MiniLM-L6-v2`) is loaded once per process via thread-safe lazy singleton in `backend/app/nlp/embedder.py`
+  - Normalized embeddings allow instant dot-product cosine similarity matrix multiplication ($O(N)$ vectorized)
+  - Response scoring embeds candidate text and indicators in a single combined batch
+  - Database queries batch indicator and dimension lookups via `.in_()` clauses, eliminating $N+1$ query overhead
+- [x] Final Test Suite:
+  - Added `backend/tests/test_rate_limiter.py` with 6 unit and integration tests
+  - ALL 197 BACKEND TESTS PASSING (100% green in 4.27s)
+  - Frontend production build verified (82 modules, 0 errors in 759ms)
+
 ## Current Work
-N/A -- Phase 7 complete.
+N/A -- System is feature-complete and production-hardened.
 
 ## Database: Apply Pending SQL
-REQUIRED before running Phase 5, Phase 6, and Phase 7 features in production:
+REQUIRED before deploying to live users:
 Go to Supabase Dashboard > SQL Editor and run:
 1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies (Phase 5)
 2. Lines 708-759: response_scores table + RLS policies (Phase 6)
 3. Lines 760-805: session_alignments table + RLS policies (Phase 7)
 All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
 
-## Pending
-- Phase 8: Results & Reporting Dashboard
-  - Advanced candidate comparisons across applicants for the same job
-  - Behavioral fit matrix & radar chart visualization
-  - Exportable candidate evaluation reports (PDF / print view)
-- Phase 9: Email delivery (optional)
-  - Send candidate invite links by email (Resend / SendGrid)
-
-## Important Decisions
-- Python version: 3.14.2 (user system) -- pydantic>=2.13 + pydantic-core>=2.46 for Py3.14 support
-- Groq model: llama3-70b-8192 (env var override available)
-- NLP embedding model: all-MiniLM-L6-v2 (sentence-transformers)
-- Scoring & Alignment determinism: 100% calculated by Python logic & cosine similarity rubrics (NO Groq hallucination in scores)
-- Alignment formula: sum(candidate_score * job_weight) / sum(job_weight)
-- Decision ethics: Strictly objective behavioral analytics; NO automated hire/reject recommendations or employment decisions
-- Candidate access: UUID token, no Supabase Auth
-- Database: Supabase PostgreSQL only -- no local DB
-- RLS: enforced on ALL tables; service-role key used in backend only
-- FastAPI lifespan: using asynccontextmanager (not deprecated on_event)
-- Frontend: Vite 8 (Rolldown bundler) + React 19 + Tailwind v4 + React Router v7
+## Important Decisions & Final Architecture
+- **Architecture Philosophy**: Hybrid AI + Deterministic Analytics:
+  - Generative AI (Groq / Llama 3 70B) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
+  - All scoring, indicator matching, confidence ratings, and alignment calculations are 100% deterministic pure Python math. LLMs never calculate, invent, or hallucinate scores.
+- **Fairness & Ethics**:
+  - Zero collection or utilization of protected/sensitive demographic attributes.
+  - Zero psychiatric or clinical mental health diagnosis.
+  - Zero automated hiring decisions ("Hire", "Reject", "Select").
+  - Mandatory ethical compliance disclaimer displayed on all reports.
+  - Mandatory human recruiter oversight at all decision stages.
+- **Candidate Security**: Unguessable UUID tokens; no Supabase Auth credentials required for applicants; public schema completely conceals internal job weights, recruiter identities, and scores.
+- **Backend Stack**: FastAPI + Python 3.14 + Pydantic v2 + SentenceTransformers (`all-MiniLM-L6-v2`) + Supabase Python SDK.
+- **Frontend Stack**: Vite 8 + React 19 + Tailwind v4 + React Router v7.
 
 ## Tests
-- 161/161 backend tests passing (Python 3.14.2, pytest 9.1.1)
-  - test_health.py:      3 tests
-  - test_jobs.py:       11 tests
-  - test_schemas.py:     8 tests
-  - test_dimensions.py: 10 tests
-  - test_analysis.py:   13 tests
-  - test_questions.py:  19 tests
-  - test_sessions.py:   19 tests
-  - test_scoring.py:    55 tests
-  - test_alignment.py:  23 tests
-- Frontend: clean production build (81 modules, 0 errors)
+- 197/197 backend tests passing (Python 3.14.2, pytest 9.1.1):
+  - test_health.py:               3 tests
+  - test_jobs.py:                11 tests
+  - test_schemas.py:              8 tests
+  - test_dimensions.py:          10 tests
+  - test_analysis.py:            13 tests
+  - test_questions.py:           19 tests
+  - test_sessions.py:            19 tests
+  - test_scoring.py:             55 tests
+  - test_alignment.py:           23 tests
+  - test_reports.py:              9 tests
+  - test_validation_fairness.py: 21 tests
+  - test_rate_limiter.py:         6 tests
+- Frontend: clean production build (82 modules, 0 errors in 759ms)
 
-## Next Step
-Phase 7 is complete.
-Next step is Phase 8: Results & Reporting Dashboard (comparative analysis, fit visualizations, exportable reports).
+## Remaining Risks & Recommendations
+1. **Supabase SQL Migration**: Run lines 622-805 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates.
+2. **Reverse Proxy Configuration**: Ensure production ingress / reverse proxy (e.g. Nginx, Cloudflare) sets the `X-Forwarded-For` header accurately for IP rate limiting.
+
+## Project Status
+All Phases (0 through 10) are COMPLETE, validated, hardened, and tested.
+System is production-ready.

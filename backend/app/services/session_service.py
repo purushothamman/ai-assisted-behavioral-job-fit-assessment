@@ -58,6 +58,20 @@ class SessionService:
             raise RuntimeError("Failed to create interview session.")
         return result.data[0]
 
+    # ── Get session by ID ───────────────────────────────────────────────────
+
+    def get_session(self, session_id: str) -> Optional[dict]:
+        """Fetch a session row by its ID."""
+        result = (
+            self._db.table("interview_sessions")
+            .select("id, job_id, token, candidate_name, candidate_email, status, expires_at, submitted_at, created_at")
+            .eq("id", session_id)
+            .maybe_single()
+            .execute()
+        )
+        self._raise_if_error(result)
+        return result.data
+
     # ── List sessions for a job ──────────────────────────────────────────────
 
     def list_sessions(self, job_id: str) -> List[dict]:

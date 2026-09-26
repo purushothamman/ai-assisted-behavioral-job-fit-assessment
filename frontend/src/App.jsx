@@ -11,6 +11,7 @@ import JobsPage        from './pages/JobsPage'
 import CreateJobPage   from './pages/CreateJobPage'
 import JobDetailPage   from './pages/JobDetailPage'
 import CandidatePage   from './pages/CandidatePage'
+import AssessmentReportPage from './pages/AssessmentReportPage'
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
                 <Route path="/jobs"       element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
                 <Route path="/jobs/new"   element={<ProtectedRoute><CreateJobPage /></ProtectedRoute>} />
                 <Route path="/jobs/:id"   element={<ProtectedRoute><JobDetailPage /></ProtectedRoute>} />
+                <Route path="/jobs/:jobId/sessions/:sessionId/report" element={<ProtectedRoute><AssessmentReportPage /></ProtectedRoute>} />
 
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

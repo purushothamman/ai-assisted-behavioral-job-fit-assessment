@@ -18,6 +18,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.rate_limiter import candidate_submit_limiter, candidate_view_limiter
 from app.core.security import require_recruiter
 from app.schemas.sessions import (
     PublicQuestion,
@@ -131,11 +132,15 @@ def list_sessions(
     "/sessions/{token}",
     summary="Candidate: fetch assessment session",
 )
-def get_session(token: str):
+def get_session(
+    token: str,
+    _rate_limit: None = Depends(candidate_view_limiter),
+):
     """
     Public endpoint — no authentication required.
     Candidate opens their unique link; we return job context + approved questions.
     Also advances session status from 'pending' -> 'in_progress'.
+    Rate-limited to 60 requests/minute.
     """
     session_svc = SessionService()
     session = session_svc.get_session_by_token(token)
@@ -187,7 +192,11 @@ def get_session(token: str):
     status_code=status.HTTP_201_CREATED,
     summary="Candidate: submit all assessment answers",
 )
-def submit_responses(token: str, payload: SubmitResponsesPayload):
+def submit_responses(
+    token: str,
+    payload: SubmitResponsesPayload,
+    _rate_limit: None = Depends(candidate_submit_limiter),
+):
     """
     Public endpoint — no authentication required.
     Candidate submits all answers at once; session is marked 'completed'.

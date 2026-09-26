@@ -97,6 +97,12 @@ export const alignmentApi = {
   listForJob: (jobId)     => api.get(`/api/jobs/${jobId}/alignments`),
 };
 
+// ── Reports endpoints (Phase 8) ──────────────────────────────────────────────
+export const reportsApi = {
+  getReport:     (sessionId) => api.get(`/api/sessions/${sessionId}/report`),
+  getJobSummary: (jobId)     => api.get(`/api/jobs/${jobId}/reports/summary`),
+};
+
 
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {

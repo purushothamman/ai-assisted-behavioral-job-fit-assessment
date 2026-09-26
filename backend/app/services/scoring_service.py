@@ -145,6 +145,7 @@ class ScoringService:
 
         # 3. Fetch full indicator objects by name (for embedding texts)
         indicator_names: List[str] = question["indicators"]
+        indicator_objs = []
         if indicator_names:
             ind_result = (
                 self._db.table("behavioral_indicators")
@@ -154,9 +155,22 @@ class ScoringService:
                 .execute()
             )
             self._raise_if_error(ind_result)
-            question["indicator_objects"] = ind_result.data or []
-        else:
-            question["indicator_objects"] = []
+            db_map = {ind["name"].lower(): ind for ind in (ind_result.data or []) if ind.get("name")}
+            for raw_name in indicator_names:
+                if not raw_name or not isinstance(raw_name, str):
+                    continue
+                name_clean = raw_name.strip()
+                name_key = name_clean.lower()
+                if name_key in db_map:
+                    indicator_objs.append(db_map[name_key])
+                else:
+                    indicator_objs.append({
+                        "id": None,
+                        "name": name_clean,
+                        "description": name_clean,
+                        "example_behaviors": "",
+                    })
+        question["indicator_objects"] = indicator_objs
 
         return question
 
