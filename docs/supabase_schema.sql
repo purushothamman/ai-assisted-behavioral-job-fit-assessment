@@ -617,3 +617,142 @@ CREATE POLICY "Recruiter can delete own job questions"
             SELECT id FROM jobs WHERE recruiter_id = auth.uid()
         )
     );
+
+
+-- =============================================================================
+-- PHASE 5 -- Candidate Portal
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- INTERVIEW_SESSIONS
+-- UUID-token access for candidates -- no Supabase Auth required for candidates
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS interview_sessions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id          UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    token           UUID NOT NULL UNIQUE DEFAULT uuid_generate_v4(),
+    candidate_name  TEXT NOT NULL,
+    candidate_email TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'in_progress', 'completed')),
+    expires_at      TIMESTAMPTZ,
+    submitted_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_job_id ON interview_sessions(job_id);
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_token  ON interview_sessions(token);
+
+COMMENT ON TABLE interview_sessions IS
+    'One row per candidate invited to an interview. Token is the public access key.';
+
+ALTER TABLE interview_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Recruiters can read/insert sessions for their own jobs
+CREATE POLICY "Recruiter can read own job sessions"
+    ON interview_sessions FOR SELECT
+    USING (
+        job_id IN (
+            SELECT id FROM jobs WHERE recruiter_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Recruiter can create sessions for own jobs"
+    ON interview_sessions FOR INSERT
+    WITH CHECK (
+        job_id IN (
+            SELECT id FROM jobs WHERE recruiter_id = auth.uid()
+        )
+    );
+
+-- Service-role (backend) can do everything (covers public candidate endpoints)
+-- No anon policy: backend uses service-role key for public candidate reads/writes.
+
+
+-- ---------------------------------------------------------------------------
+-- CANDIDATE_RESPONSES
+-- Candidate's free-text STAR answers; one row per question answered
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS candidate_responses (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id  UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES interview_questions(id) ON DELETE CASCADE,
+    answer      TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (session_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_candidate_responses_session_id  ON candidate_responses(session_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_responses_question_id ON candidate_responses(question_id);
+
+COMMENT ON TABLE candidate_responses IS
+    'Candidate free-text answers. One row per question per session.';
+
+ALTER TABLE candidate_responses ENABLE ROW LEVEL SECURITY;
+
+-- Recruiters can read responses for sessions belonging to their jobs
+CREATE POLICY "Recruiter can read responses for own jobs"
+    ON candidate_responses FOR SELECT
+    USING (
+        session_id IN (
+            SELECT s.id FROM interview_sessions s
+            JOIN jobs j ON j.id = s.job_id
+            WHERE j.recruiter_id = auth.uid()
+        )
+    );
+
+-- Service-role covers candidate INSERT (no Supabase Auth on candidate side)
+
+
+-- =============================================================================
+-- PHASE 6 -- Response Analysis & Scoring
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- RESPONSE_SCORES
+-- One row per candidate response (question), storing NLP analysis results.
+-- Scored deterministically by Python; Groq is not used for scoring.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS response_scores (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id          UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    question_id         UUID NOT NULL REFERENCES interview_questions(id) ON DELETE CASCADE,
+    response_id         UUID NOT NULL REFERENCES candidate_responses(id) ON DELETE CASCADE,
+    dimension_name      TEXT NOT NULL,
+    normalized_score    INTEGER NOT NULL DEFAULT 0
+                            CHECK (normalized_score BETWEEN 0 AND 100),
+    raw_score           FLOAT NOT NULL DEFAULT 0.0
+                            CHECK (raw_score BETWEEN 0.0 AND 1.0),
+    confidence          FLOAT NOT NULL DEFAULT 0.0
+                            CHECK (confidence BETWEEN 0.0 AND 1.0),
+    indicators_matched  INTEGER NOT NULL DEFAULT 0,
+    total_indicators    INTEGER NOT NULL DEFAULT 0,
+    status              TEXT NOT NULL DEFAULT 'scored',
+    evidence            JSONB NOT NULL DEFAULT '[]',
+    scored_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (response_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_response_scores_session_id  ON response_scores(session_id);
+CREATE INDEX IF NOT EXISTS idx_response_scores_response_id ON response_scores(response_id);
+
+COMMENT ON TABLE response_scores IS
+    'NLP-generated behavioral scores per candidate response. One row per response. '
+    'Evidence field contains per-indicator similarity scores as JSONB array.';
+
+ALTER TABLE response_scores ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Recruiter can read scores for own jobs"
+    ON response_scores FOR SELECT
+    USING (
+        session_id IN (
+            SELECT s.id FROM interview_sessions s
+            JOIN jobs j ON j.id = s.job_id
+            WHERE j.recruiter_id = auth.uid()
+        )
+    );
+
+-- Service-role handles all inserts/updates (backend scoring pipeline).
+-- No anon/candidate policy needed.

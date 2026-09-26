@@ -75,6 +75,22 @@ export const questionsApi = {
   delete:   (questionId, jobId)          => api.delete(`/api/questions/${questionId}?job_id=${jobId}`),
 };
 
+// ── Sessions endpoints (Phase 5) ──────────────────────────────────────────────
+export const sessionsApi = {
+  create:  (jobId, payload)  => api.post(`/api/jobs/${jobId}/sessions`, payload),
+  list:    (jobId)           => api.get(`/api/jobs/${jobId}/sessions`),
+  // Public — no auth required
+  getByToken:      (token)   => request('GET',  `/api/sessions/${token}`),
+  submitResponses: (token, payload) => request('POST', `/api/sessions/${token}/responses`, payload),
+};
+
+// ── Scoring endpoints (Phase 6) ──────────────────────────────────────────────
+export const scoringApi = {
+  scoreSession: (sessionId) => api.post(`/api/sessions/${sessionId}/score`),
+  getScores:    (sessionId) => api.get(`/api/sessions/${sessionId}/scores`),
+};
+
+
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {
   me:            ()        => api.get("/api/auth/me"),

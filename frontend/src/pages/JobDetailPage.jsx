@@ -2,9 +2,11 @@
 // View and edit a single job.
 // Phase 3: Behavioral Requirements panel (Groq analysis, confirm/edit per dimension).
 // Phase 4: Interview Questions panel (generate, approve/edit/delete per question).
-import { useCallback, useEffect, useState } from 'react'
+// Phase 5: Candidate Sessions panel (create token links, track status).
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { jobsApi, analysisApi, questionsApi } from '../services/api'
+import { jobsApi, analysisApi, questionsApi, sessionsApi, scoringApi } from '../services/api'
+import ScoreModal from '../components/ScoreModal'
 
 // ── Styling helpers ──────────────────────────────────────────────────────────
 const inputStyle = {
@@ -76,6 +78,21 @@ export default function JobDetailPage() {
   const [savingQ, setSavingQ]               = useState(false)
   const [deletingQId, setDeletingQId]       = useState(null)
 
+  // Sessions state (Phase 5)
+  const [sessions, setSessions]             = useState([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [showSessionForm, setShowSessionForm] = useState(false)
+  const [sessionForm, setSessionForm]       = useState({ candidate_name: '', candidate_email: '', expires_in_days: 7 })
+  const [creatingSession, setCreatingSession] = useState(false)
+  const [sessionError, setSessionError]     = useState('')
+  const [copiedToken, setCopiedToken]       = useState(null)
+
+  // Scoring state (Phase 6)
+  const [scoringSessionId, setScoringSessionId] = useState(null)
+  const [loadingScoresId, setLoadingScoresId]   = useState(null)
+  const [activeScoreModal, setActiveScoreModal] = useState(null)
+  const [scoringError, setScoringError]         = useState('')
+
   // Load job
   useEffect(() => {
     jobsApi.get(id)
@@ -104,12 +121,23 @@ export default function JobDetailPage() {
       .finally(() => setQuestionsLoading(false))
   }, [id])
 
+  // Load sessions when job is ready (Phase 5)
+  const loadSessions = useCallback(() => {
+    if (!id) return
+    setSessionsLoading(true)
+    sessionsApi.list(id)
+      .then(r => setSessions(r.data ?? []))
+      .catch(() => {})
+      .finally(() => setSessionsLoading(false))
+  }, [id])
+
   useEffect(() => {
     if (job) {
       loadRequirements()
       loadQuestions()
+      loadSessions()
     }
-  }, [job, loadRequirements, loadQuestions])
+  }, [job, loadRequirements, loadQuestions, loadSessions])
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
 
@@ -257,6 +285,62 @@ export default function JobDetailPage() {
       await questionsApi.update(q.id, id, { approved: true })
     }
     loadQuestions()
+  }
+
+  // ── Session handlers (Phase 5) ──────────────────────────────────────────
+  const handleCreateSession = async (e) => {
+    e.preventDefault()
+    setCreatingSession(true); setSessionError('')
+    try {
+      await sessionsApi.create(id, {
+        candidate_name:  sessionForm.candidate_name.trim(),
+        candidate_email: sessionForm.candidate_email.trim(),
+        expires_in_days: Number(sessionForm.expires_in_days),
+      })
+      setShowSessionForm(false)
+      setSessionForm({ candidate_name: '', candidate_email: '', expires_in_days: 7 })
+      loadSessions()
+    } catch (err) {
+      setSessionError(err.message)
+    } finally {
+      setCreatingSession(false)
+    }
+  }
+
+  const handleCopyLink = async (token) => {
+    const link = `${window.location.origin}/assess/${token}`
+    await navigator.clipboard.writeText(link)
+    setCopiedToken(token)
+    setTimeout(() => setCopiedToken(null), 2500)
+  }
+
+  // ── Scoring handlers (Phase 6) ──────────────────────────────────────────
+  const handleScoreSession = async (sessionId) => {
+    setScoringSessionId(sessionId)
+    setScoringError('')
+    try {
+      await scoringApi.scoreSession(sessionId)
+      const res = await scoringApi.getScores(sessionId)
+      setActiveScoreModal(res.data)
+      loadSessions()
+    } catch (err) {
+      setScoringError(err.message || 'Scoring failed')
+    } finally {
+      setScoringSessionId(null)
+    }
+  }
+
+  const handleViewScores = async (sessionId) => {
+    setLoadingScoresId(sessionId)
+    setScoringError('')
+    try {
+      const res = await scoringApi.getScores(sessionId)
+      setActiveScoreModal(res.data)
+    } catch (err) {
+      setScoringError(err.message || 'Failed to fetch scores')
+    } finally {
+      setLoadingScoresId(null)
+    }
   }
 
   // ── Guards ───────────────────────────────────────────────────────────────
@@ -714,6 +798,196 @@ export default function JobDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Candidate Sessions Panel (Phase 5) ──────────────────────────── */}
+      <div style={{ borderRadius: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', overflow: 'hidden', marginBottom: 16 }}>
+        {/* Panel header */}
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>Candidate Sessions</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
+              {sessions.length === 0
+                ? 'Send assessment links to candidates to begin the interview.'
+                : `${sessions.length} session${sessions.length !== 1 ? 's' : ''} · ${sessions.filter(s => s.status === 'completed').length} completed`}
+            </p>
+          </div>
+          <button
+            id="btn-invite-candidate"
+            onClick={() => { setShowSessionForm(v => !v); setSessionError('') }}
+            disabled={approvedCount === 0}
+            title={approvedCount === 0 ? 'Approve at least one question first' : 'Invite a candidate'}
+            style={btnStyle(
+              approvedCount === 0 ? 'var(--color-border)' : 'linear-gradient(135deg,#6366f1,#a78bfa)',
+              '#fff', '12px'
+            )}
+          >
+            {showSessionForm ? '✕ Cancel' : '✉️ Invite Candidate'}
+          </button>
+        </div>
+
+        {/* Create session form */}
+        {showSessionForm && (
+          <form onSubmit={handleCreateSession} style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', background: 'rgba(99,102,241,.04)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 14 }}>
+              <Field label="Candidate Name">
+                <input
+                  required
+                  value={sessionForm.candidate_name}
+                  onChange={e => setSessionForm(f => ({ ...f, candidate_name: e.target.value }))}
+                  placeholder="e.g. Alice Smith"
+                  style={{ ...inputStyle, ...fieldInput }}
+                />
+              </Field>
+              <Field label="Candidate Email">
+                <input
+                  required type="email"
+                  value={sessionForm.candidate_email}
+                  onChange={e => setSessionForm(f => ({ ...f, candidate_email: e.target.value }))}
+                  placeholder="alice@example.com"
+                  style={{ ...inputStyle, ...fieldInput }}
+                />
+              </Field>
+            </div>
+            <Field label={`Link expires in ${sessionForm.expires_in_days} day${sessionForm.expires_in_days !== 1 ? 's' : ''}`}>
+              <input
+                type="range" min={1} max={30}
+                value={sessionForm.expires_in_days}
+                onChange={e => setSessionForm(f => ({ ...f, expires_in_days: Number(e.target.value) }))}
+                style={{ width: '100%' }}
+              />
+            </Field>
+            {sessionError && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-danger)' }}>{sessionError}</p>}
+            <button
+              type="submit"
+              disabled={creatingSession}
+              style={{ ...btnStyle(creatingSession ? 'var(--color-border)' : 'var(--color-primary)', '#fff'), marginTop: 14, padding: '8px 20px', fontWeight: 600 }}
+            >
+              {creatingSession ? 'Creating…' : 'Generate & Send Link'}
+            </button>
+          </form>
+        )}
+
+        {/* Sessions list */}
+        <div style={{ padding: sessionsLoading || sessions.length === 0 ? 24 : 0 }}>
+          {sessionsLoading ? (
+            <p style={{ margin: 0, color: 'var(--color-muted)', fontSize: 13 }}>Loading sessions…</p>
+          ) : sessions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <p style={{ margin: 0, fontSize: 32 }}>✉️</p>
+              <p style={{ margin: '8px 0 0', color: 'var(--color-muted)', fontSize: 13 }}>
+                {approvedCount === 0
+                  ? 'Approve at least one question before inviting candidates.'
+                  : 'No sessions yet. Click "Invite Candidate" to send the first link.'}
+              </p>
+            </div>
+          ) : (
+            sessions.map((session, i) => {
+              const statusMeta = {
+                pending:     { label: 'Pending',     color: '#fbbf24', bg: 'rgba(251,191,36,.12)' },
+                in_progress: { label: 'In Progress', color: '#6366f1', bg: 'rgba(99,102,241,.12)' },
+                completed:   { label: 'Completed',   color: '#34d399', bg: 'rgba(52,211,153,.12)' },
+              }[session.status] ?? { label: session.status, color: '#94a3b8', bg: 'rgba(148,163,184,.12)' }
+
+              const link = `${window.location.origin}/assess/${session.token}`
+              const expiresAt = session.expires_at ? new Date(session.expires_at) : null
+              const isExpired = expiresAt && expiresAt < new Date()
+
+              return (
+                <div key={session.id} style={{
+                  padding: '16px 24px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {session.candidate_name}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, flexShrink: 0 }}>
+                        {statusMeta.label}
+                      </span>
+                      {isExpired && session.status !== 'completed' && (
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'rgba(248,113,113,.12)', color: 'var(--color-danger)', flexShrink: 0 }}>Expired</span>
+                      )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--color-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {session.candidate_email}
+                      {expiresAt && !isExpired && !session.submitted_at && (
+                        <> · Expires {expiresAt.toLocaleDateString()}</>
+                      )}
+                      {session.submitted_at && (
+                        <> · Submitted {new Date(session.submitted_at).toLocaleDateString()}</>
+                      )}
+                    </p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--color-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                      {link}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {session.status === 'completed' && (
+                      <>
+                        <button
+                          id={`btn-score-session-${session.id}`}
+                          onClick={() => handleScoreSession(session.id)}
+                          disabled={scoringSessionId === session.id}
+                          style={btnStyle(
+                            scoringSessionId === session.id ? 'var(--color-border)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                            '#fff',
+                            '12px'
+                          )}
+                          title="Run NLP behavioral scoring on candidate responses"
+                        >
+                          {scoringSessionId === session.id ? '⚡ Scoring…' : '⚡ Score / Re-Score'}
+                        </button>
+                        <button
+                          id={`btn-view-scores-${session.id}`}
+                          onClick={() => handleViewScores(session.id)}
+                          disabled={loadingScoresId === session.id}
+                          style={btnStyle(
+                            'rgba(99,102,241,.15)',
+                            '#818cf8',
+                            '12px'
+                          )}
+                          title="View evaluation summary & explainable evidence"
+                        >
+                          {loadingScoresId === session.id ? '…' : '📊 View Scores'}
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleCopyLink(session.token)}
+                      style={btnStyle(
+                        copiedToken === session.token ? 'rgba(52,211,153,.15)' : 'var(--color-surface-2)',
+                        copiedToken === session.token ? 'var(--color-success)' : 'var(--color-text)',
+                        '12px'
+                      )}
+                    >
+                      {copiedToken === session.token ? '✓ Copied!' : '📋 Copy Link'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Scoring Error Alert */}
+      {scoringError && (
+        <div style={{ marginBottom: 16 }}>
+          <Alert type="error" msg={scoringError} />
+        </div>
+      )}
+
+      {/* Score Modal (Phase 6) */}
+      {activeScoreModal && (
+        <ScoreModal
+          data={activeScoreModal}
+          onClose={() => setActiveScoreModal(null)}
+          onRescore={() => handleScoreSession(activeScoreModal.session_id)}
+          isRescoring={scoringSessionId === activeScoreModal.session_id}
+        />
+      )}
     </div>
   )
 }
