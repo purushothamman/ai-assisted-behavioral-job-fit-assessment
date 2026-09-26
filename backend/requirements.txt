@@ -9,6 +9,9 @@ pydantic-settings>=2.7.0
 # Supabase
 supabase>=2.9.0
 
+# Groq AI
+groq>=1.7.0
+
 # HTTP client (used by supabase SDK)
 httpx>=0.27.0
 

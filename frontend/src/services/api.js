@@ -60,6 +60,13 @@ export const dimensionsApi = {
   get:    (id) => api.get(`/api/dimensions/${id}`),
 };
 
+// ── Analysis endpoints (Phase 3) ──────────────────────────────────────────────
+export const analysisApi = {
+  analyze:          (jobId)                   => api.post(`/api/jobs/${jobId}/analyze`),
+  listRequirements: (jobId)                   => api.get(`/api/jobs/${jobId}/requirements`),
+  updateRequirement:(jobId, reqId, payload)   => api.patch(`/api/jobs/${jobId}/requirements/${reqId}`, payload),
+};
+
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {
   me:            ()        => api.get("/api/auth/me"),

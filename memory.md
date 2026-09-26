@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Current Phase
-Phase 2 -- Behavioral Framework + API -- COMPLETE
+Phase 3 -- Groq Job Analysis -- COMPLETE
 
 ## Completed
 ### Phase 0
@@ -9,68 +9,73 @@ Phase 2 -- Behavioral Framework + API -- COMPLETE
 
 ### Phase 1
 - [x] Backend: Python venv (.venv) with all dependencies (Python 3.14.2)
-- [x] Backend: requirements.txt (fastapi, pydantic, supabase, uvicorn, pytest-env, etc.)
+- [x] Backend: requirements.txt + groq>=1.7.0 added
 - [x] Backend: pyproject.toml with pytest config + env var injection for tests
-- [x] Backend: app/core/config.py (pydantic-settings, all env vars)
+- [x] Backend: app/core/config.py (pydantic-settings, all env vars incl. GROQ_*)
 - [x] Backend: app/core/security.py (Supabase JWT validation, require_recruiter dep)
 - [x] Backend: app/db/client.py (anon + admin Supabase client singletons)
 - [x] Backend: app/schemas/common.py, jobs.py, profiles.py
-- [x] Backend: app/services/job_service.py (full CRUD, defense-in-depth recruiter_id filter)
+- [x] Backend: app/services/job_service.py (full CRUD)
 - [x] Backend: app/services/profile_service.py (get, upsert, update)
-- [x] Backend: app/api/health.py (/health, /health/db)
-- [x] Backend: app/api/auth.py (GET /api/auth/me, PATCH /api/auth/profile)
-- [x] Backend: app/api/jobs.py (full CRUD: POST/GET/PATCH/DELETE /api/jobs)
+- [x] Backend: app/api/health.py, auth.py, jobs.py
 - [x] Backend: app/main.py (lifespan, CORS, all routers)
-- [x] Backend: tests/conftest.py (env loading, auth override, Supabase mock)
-- [x] Backend: tests/test_health.py (3 tests)
-- [x] Backend: tests/test_jobs.py (11 tests)
-- [x] Backend: tests/test_schemas.py (8 tests)
-- [x] Backend: ALL 22 TESTS PASSING (Python 3.14, 0 deprecation warnings)
-- [x] Database: docs/supabase_schema.sql (14 tables, RLS policies, seed data, triggers)
-- [x] Frontend: Vite + React 19 scaffold
-- [x] Frontend: Tailwind CSS v4 + @tailwindcss/vite
-- [x] Frontend: react-router-dom, @supabase/supabase-js, recharts
-- [x] Frontend: src/services/supabase.js (browser auth client)
-- [x] Frontend: src/services/api.js (fetch wrapper, jobs/auth/health endpoints)
-- [x] Frontend: src/context/AuthContext.jsx (session state, signIn/signUp/signOut)
-- [x] Frontend: src/components/ProtectedRoute.jsx, Navbar.jsx
-- [x] Frontend: src/pages/LoginPage.jsx, DashboardPage.jsx, JobsPage.jsx, CreateJobPage.jsx, JobDetailPage.jsx
-- [x] Frontend: src/App.jsx (BrowserRouter, all routes)
-- [x] Frontend: Clean production build -- 77 modules, 0 errors, 0 warnings
+- [x] Backend: tests/conftest.py, test_health.py (3), test_jobs.py (11), test_schemas.py (8)
+- [x] Backend: 22/22 tests passing
+- [x] Database: docs/supabase_schema.sql (14 tables, RLS, seed data, triggers)
+- [x] Frontend: Vite 8 + React 19 + Tailwind v4 + React Router v7
+- [x] Frontend: Auth context, Navbar, ProtectedRoute
+- [x] Frontend: LoginPage, DashboardPage, JobsPage, CreateJobPage, JobDetailPage
+- [x] Frontend: Clean production build (77 modules)
 
 ### Phase 2
 - [x] Backend: app/schemas/dimensions.py (IndicatorRead, DimensionRead, DimensionDetail)
 - [x] Backend: app/services/dimension_service.py (list, get, get_by_name, list_indicators)
 - [x] Backend: app/api/dimensions.py (GET /api/dimensions, GET /api/dimensions/{id})
-- [x] Backend: app/main.py updated -- dimensions router registered
-- [x] Backend: tests/test_dimensions.py (10 tests: list, detail, 404, 422, service error, no-indicators)
-- [x] Backend: ALL 32 TESTS PASSING (0 new warnings)
-- [x] Frontend: src/services/api.js -- dimensionsApi added (list, get)
-- [x] Frontend: src/pages/DimensionsPage.jsx (accordion card grid, per-dimension colors + icons)
-- [x] Frontend: src/components/Navbar.jsx -- Dimensions nav link added
-- [x] Frontend: src/App.jsx -- /dimensions route registered
-- [x] Frontend: Clean production build -- 78 modules, 0 errors, 0 warnings
-- [x] Git: Phase 2 committed to main branch
+- [x] Backend: tests/test_dimensions.py (10 tests)
+- [x] Frontend: DimensionsPage.jsx (accordion card grid, per-dimension colors + icons)
+- [x] Frontend: Navbar + App.jsx updated (/dimensions route)
+- [x] Frontend: Clean build (78 modules)
+
+### Phase 3
+- [x] Backend: app/ai/groq_client.py (shared client, retry, GroqError, call_groq_json)
+- [x] Backend: app/ai/schemas.py (DimensionRequirement, JobAnalysisOutput — Pydantic-validated)
+- [x] Backend: app/ai/job_analyzer.py (analyze_job — prompt engineering + validation)
+- [x] Backend: app/schemas/requirements.py (RequirementRead, RequirementConfirm)
+- [x] Backend: app/services/job_requirement_service.py (save, list, update with ownership)
+- [x] Backend: app/api/analysis.py (POST analyze, GET requirements, PATCH requirement)
+- [x] Backend: app/main.py updated -- analysis router registered
+- [x] Backend: requirements.txt -- groq>=1.7.0 added
+- [x] Backend: tests/test_analysis.py (13 tests: analyze success/fail/503/422, list, confirm, ownership)
+- [x] Backend: ALL 45 TESTS PASSING (0 new warnings)
+- [x] Frontend: services/api.js -- analysisApi added (analyze, listRequirements, updateRequirement)
+- [x] Frontend: JobDetailPage.jsx -- full Behavioral Requirements panel
+  - "Analyze with AI" button -> calls Groq, shows results
+  - Per-dimension importance bar + color badge (Critical/Important/Secondary)
+  - Inline edit mode: slider for importance, textarea for reason
+  - "Save & Confirm" per dimension, "Confirm All" batch action
+  - Status badge on job header updates to "analyzed" after Groq call
+- [x] Frontend: Clean production build (78 modules, 0 errors)
 
 ## Current Work
-N/A -- Phase 2 complete.
+N/A -- Phase 3 complete.
 
 ## Pending
-- Phase 3: Groq job analysis
-  - Add GROQ_API_KEY to config + .env.example
-  - Implement app/ai/groq_client.py (shared client, retry, error handling)
-  - Implement app/ai/schemas.py (Pydantic I/O models for Groq responses)
-  - Implement app/ai/job_analyzer.py (JD -> [{dimension, importance, reason}])
-  - Implement app/services/job_requirement_service.py (save/list/confirm requirements)
-  - Implement app/schemas/requirements.py
-  - Add POST /api/jobs/{id}/analyze endpoint
-  - Add GET/PATCH /api/jobs/{id}/requirements endpoints
-  - Add JobDetailPage requirements section (review + confirm)
-  - Tests: mock Groq, test job_analyzer, test requirements API
+- Phase 4: Question generation (Groq)
+  - Implement app/ai/question_generator.py (JD + confirmed requirements -> [{question, dimension, type, difficulty, indicators}])
+  - Implement app/schemas/questions.py (QuestionRead, QuestionUpdate, QuestionCreate)
+  - Implement app/services/question_service.py (save, list, update, delete)
+  - Add POST /api/jobs/{id}/questions/generate
+  - Add GET /api/jobs/{id}/questions
+  - Add PATCH /api/questions/{id}
+  - Add DELETE /api/questions/{id}
+  - Add questions panel to JobDetailPage (approve / edit / delete questions)
+  - Tests: mock Groq, test question generator, test questions API
 
 ## Important Decisions
 - Python version: 3.14.2 (user's system) -- using pydantic>=2.13 + pydantic-core>=2.46 for Py3.14 support
 - Groq model: llama3-70b-8192 (env var override available)
+- Groq error handling: GroqError (retryable) -> 503; ValueError (validation) -> 422; 4xx -> immediate fail
+- Groq JSON mode: response_format={"type":"json_object"} used on all calls
 - NLP embedding model: all-MiniLM-L6-v2 (Phase 7)
 - Candidate access: UUID token, no Supabase Auth (Phase 6)
 - Scoring: fully deterministic Python rubric; Groq extracts evidence only (Phase 8)
@@ -80,83 +85,40 @@ N/A -- Phase 2 complete.
 - Test strategy: pytest-env injects stub Supabase creds; Supabase client mocked; auth dep overridden
 - Frontend: Vite 8 (Rolldown bundler) + React 19 + Tailwind v4 + React Router v7
 - Dimensions API: read-only, public-read RLS -- no write endpoints needed in the app
+- Job analysis: upsert on (job_id, dimension_id) -- re-analyzing replaces previous output
 
-## Files Changed (Phase 1)
+## Files Changed (Phase 3)
 ### Backend
-- backend/requirements.txt            -- created + updated (Py3.14 compat)
-- backend/pyproject.toml              -- created (pytest config + env injection)
-- backend/.env.test                   -- created (stub creds for CI)
-- backend/app/__init__.py             -- created
-- backend/app/main.py                 -- created (lifespan, CORS, routers)
-- backend/app/core/__init__.py        -- created
-- backend/app/core/config.py          -- created
-- backend/app/core/security.py        -- created
-- backend/app/db/__init__.py          -- created
-- backend/app/db/client.py            -- created
-- backend/app/schemas/__init__.py     -- created
-- backend/app/schemas/common.py       -- created
-- backend/app/schemas/jobs.py         -- created
-- backend/app/schemas/profiles.py     -- created
-- backend/app/services/__init__.py    -- created
-- backend/app/services/job_service.py -- created
-- backend/app/services/profile_service.py -- created
-- backend/app/api/__init__.py         -- created
-- backend/app/api/health.py           -- created
-- backend/app/api/auth.py             -- created
-- backend/app/api/jobs.py             -- created
-- backend/tests/__init__.py           -- created
-- backend/tests/conftest.py           -- created + updated
-- backend/tests/test_health.py        -- created
-- backend/tests/test_jobs.py          -- created
-- backend/tests/test_schemas.py       -- created
-### Database
-- docs/supabase_schema.sql            -- created (full schema + RLS + seed)
+- backend/requirements.txt                         -- updated (groq>=1.7.0 added)
+- backend/app/ai/groq_client.py                    -- created (shared client, retry, GroqError)
+- backend/app/ai/schemas.py                        -- created (DimensionRequirement, JobAnalysisOutput)
+- backend/app/ai/job_analyzer.py                   -- created (analyze_job, prompt template)
+- backend/app/schemas/requirements.py              -- created (RequirementRead, RequirementConfirm)
+- backend/app/services/job_requirement_service.py  -- created (save, list, update)
+- backend/app/api/analysis.py                      -- created (3 endpoints)
+- backend/app/main.py                              -- updated (analysis router added)
+- backend/tests/test_analysis.py                   -- created (13 tests)
 ### Frontend
-- frontend/index.html                 -- updated
-- frontend/vite.config.js             -- updated (Tailwind plugin, proxy)
-- frontend/.env.example               -- created
-- frontend/src/index.css              -- updated (Tailwind v4 + design tokens)
-- frontend/src/main.jsx               -- updated
-- frontend/src/App.jsx                -- updated (all routes)
-- frontend/src/services/api.js        -- created
-- frontend/src/services/supabase.js   -- created
-- frontend/src/context/AuthContext.jsx       -- created
-- frontend/src/components/ProtectedRoute.jsx -- created
-- frontend/src/components/Navbar.jsx         -- created
-- frontend/src/pages/LoginPage.jsx           -- created
-- frontend/src/pages/DashboardPage.jsx       -- created
-- frontend/src/pages/JobsPage.jsx            -- created
-- frontend/src/pages/CreateJobPage.jsx       -- created
-- frontend/src/pages/JobDetailPage.jsx       -- created
-
-## Files Changed (Phase 2)
-### Backend
-- backend/app/schemas/dimensions.py          -- created (IndicatorRead, DimensionRead, DimensionDetail)
-- backend/app/services/dimension_service.py  -- created (list, get, get_by_name, list_indicators)
-- backend/app/api/dimensions.py              -- created (GET /api/dimensions, GET /api/dimensions/{id})
-- backend/app/main.py                        -- updated (dimensions router added)
-- backend/tests/test_dimensions.py           -- created (10 tests)
-### Frontend
-- frontend/src/services/api.js               -- updated (dimensionsApi added)
-- frontend/src/pages/DimensionsPage.jsx      -- created (accordion card grid)
-- frontend/src/components/Navbar.jsx         -- updated (Dimensions nav link)
-- frontend/src/App.jsx                       -- updated (/dimensions route)
+- frontend/src/services/api.js                     -- updated (analysisApi added)
+- frontend/src/pages/JobDetailPage.jsx             -- rewritten (Behavioral Requirements panel)
 
 ## Known Issues
 - Starlette TestClient warns "Using httpx with starlette.testclient is deprecated; install httpx2"
   This is a Starlette upstream issue (httpx2 not published on PyPI yet). Not our code. Tests pass.
 - Frontend build shows no errors. VITE_SUPABASE_URL must be set in frontend/.env.local before running.
+- Groq analysis requires GROQ_API_KEY in backend/.env to work in production.
 
 ## Tests
-- 32/32 backend tests passing (Python 3.14.2, pytest 9.1.1)
+- 45/45 backend tests passing (Python 3.14.2, pytest 9.1.1)
   - test_health.py: 3 tests
   - test_jobs.py: 11 tests
   - test_schemas.py: 8 tests
   - test_dimensions.py: 10 tests
+  - test_analysis.py: 13 tests
 - Frontend: clean production build (78 modules, 0 errors)
 - Run tests: cd backend && .venv\Scripts\pytest tests\ -v
 
 ## Next Step
-WAIT for user instruction before starting Phase 3.
-Phase 3 = Groq job analysis (JD -> behavioral requirements).
-BEFORE STARTING: Ensure docs/supabase_schema.sql has been applied to your Supabase project.
+WAIT for user instruction before starting Phase 4.
+Phase 4 = Question generation (Groq: confirmed requirements -> interview questions).
+BEFORE STARTING: Ensure GROQ_API_KEY is set in backend/.env and docs/supabase_schema.sql is applied.
