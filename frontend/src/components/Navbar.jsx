@@ -32,6 +32,12 @@ export default function Navbar() {
                   onMouseLeave={e => e.target.style.color = 'var(--color-muted)'}>
               Dashboard
             </Link>
+            <Link to="/dimensions" className="text-sm transition-colors"
+                  style={{ color: 'var(--color-muted)' }}
+                  onMouseEnter={e => e.target.style.color = 'var(--color-text)'}
+                  onMouseLeave={e => e.target.style.color = 'var(--color-muted)'}>
+              Dimensions
+            </Link>
             <Link to="/jobs" className="text-sm transition-colors"
                   style={{ color: 'var(--color-muted)' }}
                   onMouseEnter={e => e.target.style.color = 'var(--color-text)'}

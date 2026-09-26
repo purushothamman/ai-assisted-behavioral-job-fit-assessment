@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Current Phase
-Phase 1 -- Supabase + FastAPI Foundation -- COMPLETE
+Phase 2 -- Behavioral Framework + API -- COMPLETE
 
 ## Completed
 ### Phase 0
@@ -38,15 +38,35 @@ Phase 1 -- Supabase + FastAPI Foundation -- COMPLETE
 - [x] Frontend: src/App.jsx (BrowserRouter, all routes)
 - [x] Frontend: Clean production build -- 77 modules, 0 errors, 0 warnings
 
+### Phase 2
+- [x] Backend: app/schemas/dimensions.py (IndicatorRead, DimensionRead, DimensionDetail)
+- [x] Backend: app/services/dimension_service.py (list, get, get_by_name, list_indicators)
+- [x] Backend: app/api/dimensions.py (GET /api/dimensions, GET /api/dimensions/{id})
+- [x] Backend: app/main.py updated -- dimensions router registered
+- [x] Backend: tests/test_dimensions.py (10 tests: list, detail, 404, 422, service error, no-indicators)
+- [x] Backend: ALL 32 TESTS PASSING (0 new warnings)
+- [x] Frontend: src/services/api.js -- dimensionsApi added (list, get)
+- [x] Frontend: src/pages/DimensionsPage.jsx (accordion card grid, per-dimension colors + icons)
+- [x] Frontend: src/components/Navbar.jsx -- Dimensions nav link added
+- [x] Frontend: src/App.jsx -- /dimensions route registered
+- [x] Frontend: Clean production build -- 78 modules, 0 errors, 0 warnings
+- [x] Git: Phase 2 committed to main branch
+
 ## Current Work
-N/A -- Phase 1 complete.
+N/A -- Phase 2 complete.
 
 ## Pending
-- Phase 2: Behavioral framework + database seed data
-  - Verify SQL schema applied to Supabase project
-  - Confirm seed data (dimensions + indicators) is in DB
-  - Add API endpoints to read dimensions/indicators
-  - Add frontend page to display dimensions
+- Phase 3: Groq job analysis
+  - Add GROQ_API_KEY to config + .env.example
+  - Implement app/ai/groq_client.py (shared client, retry, error handling)
+  - Implement app/ai/schemas.py (Pydantic I/O models for Groq responses)
+  - Implement app/ai/job_analyzer.py (JD -> [{dimension, importance, reason}])
+  - Implement app/services/job_requirement_service.py (save/list/confirm requirements)
+  - Implement app/schemas/requirements.py
+  - Add POST /api/jobs/{id}/analyze endpoint
+  - Add GET/PATCH /api/jobs/{id}/requirements endpoints
+  - Add JobDetailPage requirements section (review + confirm)
+  - Tests: mock Groq, test job_analyzer, test requirements API
 
 ## Important Decisions
 - Python version: 3.14.2 (user's system) -- using pydantic>=2.13 + pydantic-core>=2.46 for Py3.14 support
@@ -59,6 +79,7 @@ N/A -- Phase 1 complete.
 - FastAPI lifespan: using asynccontextmanager (not deprecated on_event)
 - Test strategy: pytest-env injects stub Supabase creds; Supabase client mocked; auth dep overridden
 - Frontend: Vite 8 (Rolldown bundler) + React 19 + Tailwind v4 + React Router v7
+- Dimensions API: read-only, public-read RLS -- no write endpoints needed in the app
 
 ## Files Changed (Phase 1)
 ### Backend
@@ -108,21 +129,34 @@ N/A -- Phase 1 complete.
 - frontend/src/pages/CreateJobPage.jsx       -- created
 - frontend/src/pages/JobDetailPage.jsx       -- created
 
+## Files Changed (Phase 2)
+### Backend
+- backend/app/schemas/dimensions.py          -- created (IndicatorRead, DimensionRead, DimensionDetail)
+- backend/app/services/dimension_service.py  -- created (list, get, get_by_name, list_indicators)
+- backend/app/api/dimensions.py              -- created (GET /api/dimensions, GET /api/dimensions/{id})
+- backend/app/main.py                        -- updated (dimensions router added)
+- backend/tests/test_dimensions.py           -- created (10 tests)
+### Frontend
+- frontend/src/services/api.js               -- updated (dimensionsApi added)
+- frontend/src/pages/DimensionsPage.jsx      -- created (accordion card grid)
+- frontend/src/components/Navbar.jsx         -- updated (Dimensions nav link)
+- frontend/src/App.jsx                       -- updated (/dimensions route)
+
 ## Known Issues
 - Starlette TestClient warns "Using httpx with starlette.testclient is deprecated; install httpx2"
   This is a Starlette upstream issue (httpx2 not published on PyPI yet). Not our code. Tests pass.
 - Frontend build shows no errors. VITE_SUPABASE_URL must be set in frontend/.env.local before running.
 
 ## Tests
-- 22/22 backend tests passing (Python 3.14.2, pytest 9.1.1)
-  - test_health.py: 3 tests (liveness, DB connected, DB unreachable)
-  - test_jobs.py: 11 tests (create, list, get, update, delete -- success + failure)
-  - test_schemas.py: 8 tests (validation, enum, blank title, etc.)
-- Frontend: clean production build (77 modules, 0 errors)
+- 32/32 backend tests passing (Python 3.14.2, pytest 9.1.1)
+  - test_health.py: 3 tests
+  - test_jobs.py: 11 tests
+  - test_schemas.py: 8 tests
+  - test_dimensions.py: 10 tests
+- Frontend: clean production build (78 modules, 0 errors)
 - Run tests: cd backend && .venv\Scripts\pytest tests\ -v
 
 ## Next Step
-WAIT for user instruction before starting Phase 2.
-Phase 2 = Behavioral framework + database seed data.
-BEFORE STARTING: Apply docs/supabase_schema.sql to your Supabase project first.
-
+WAIT for user instruction before starting Phase 3.
+Phase 3 = Groq job analysis (JD -> behavioral requirements).
+BEFORE STARTING: Ensure docs/supabase_schema.sql has been applied to your Supabase project.

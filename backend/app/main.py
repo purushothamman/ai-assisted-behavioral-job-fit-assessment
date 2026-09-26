@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, health, jobs
+from app.api import auth, dimensions, health, jobs
 from app.core.config import get_settings
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
+    app.include_router(dimensions.router, prefix="/api")
 
     return app
 

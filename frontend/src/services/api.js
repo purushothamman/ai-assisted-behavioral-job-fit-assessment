@@ -54,6 +54,12 @@ export const jobsApi = {
   delete: (id)            => api.delete(`/api/jobs/${id}`),
 };
 
+// ── Dimensions endpoints ──────────────────────────────────────────────────────
+export const dimensionsApi = {
+  list:   ()   => api.get('/api/dimensions'),
+  get:    (id) => api.get(`/api/dimensions/${id}`),
+};
+
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {
   me:            ()        => api.get("/api/auth/me"),
