@@ -90,6 +90,13 @@ export const scoringApi = {
   getScores:    (sessionId) => api.get(`/api/sessions/${sessionId}/scores`),
 };
 
+// ── Alignment endpoints (Phase 7) ─────────────────────────────────────────────
+export const alignmentApi = {
+  calculate:  (sessionId) => api.post(`/api/sessions/${sessionId}/alignment`),
+  get:        (sessionId) => api.get(`/api/sessions/${sessionId}/alignment`),
+  listForJob: (jobId)     => api.get(`/api/jobs/${jobId}/alignments`),
+};
+
 
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {

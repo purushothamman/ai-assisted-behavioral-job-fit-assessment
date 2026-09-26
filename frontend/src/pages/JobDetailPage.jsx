@@ -5,8 +5,9 @@
 // Phase 5: Candidate Sessions panel (create token links, track status).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { jobsApi, analysisApi, questionsApi, sessionsApi, scoringApi } from '../services/api'
+import { jobsApi, analysisApi, questionsApi, sessionsApi, scoringApi, alignmentApi } from '../services/api'
 import ScoreModal from '../components/ScoreModal'
+import AlignmentModal from '../components/AlignmentModal'
 
 // ── Styling helpers ──────────────────────────────────────────────────────────
 const inputStyle = {
@@ -92,6 +93,11 @@ export default function JobDetailPage() {
   const [loadingScoresId, setLoadingScoresId]   = useState(null)
   const [activeScoreModal, setActiveScoreModal] = useState(null)
   const [scoringError, setScoringError]         = useState('')
+
+  // Alignment state (Phase 7)
+  const [loadingAlignmentId, setLoadingAlignmentId] = useState(null)
+  const [activeAlignmentModal, setActiveAlignmentModal] = useState(null)
+  const [alignmentError, setAlignmentError]         = useState('')
 
   // Load job
   useEffect(() => {
@@ -340,6 +346,39 @@ export default function JobDetailPage() {
       setScoringError(err.message || 'Failed to fetch scores')
     } finally {
       setLoadingScoresId(null)
+    }
+  }
+
+  // ── Alignment handlers (Phase 7) ────────────────────────────────────────
+  const handleViewAlignment = async (sessionId) => {
+    setLoadingAlignmentId(sessionId)
+    setAlignmentError('')
+    try {
+      let res
+      try {
+        res = await alignmentApi.get(sessionId)
+      } catch (getErr) {
+        // If not yet calculated, calculate on the fly
+        res = await alignmentApi.calculate(sessionId)
+      }
+      setActiveAlignmentModal(res.data)
+    } catch (err) {
+      setAlignmentError(err.message || 'Failed to retrieve or calculate alignment')
+    } finally {
+      setLoadingAlignmentId(null)
+    }
+  }
+
+  const handleRecalculateAlignment = async (sessionId) => {
+    setLoadingAlignmentId(sessionId)
+    setAlignmentError('')
+    try {
+      const res = await alignmentApi.calculate(sessionId)
+      setActiveAlignmentModal(res.data)
+    } catch (err) {
+      setAlignmentError(err.message || 'Failed to recalculate alignment')
+    } finally {
+      setLoadingAlignmentId(null)
     }
   }
 
@@ -952,6 +991,19 @@ export default function JobDetailPage() {
                         >
                           {loadingScoresId === session.id ? '…' : '📊 View Scores'}
                         </button>
+                        <button
+                          id={`btn-view-alignment-${session.id}`}
+                          onClick={() => handleViewAlignment(session.id)}
+                          disabled={loadingAlignmentId === session.id}
+                          style={btnStyle(
+                            'rgba(52,211,153,.15)',
+                            '#34d399',
+                            '12px'
+                          )}
+                          title="View job-candidate behavioral alignment score and analysis"
+                        >
+                          {loadingAlignmentId === session.id ? '…' : '🎯 Alignment'}
+                        </button>
                       </>
                     )}
                     <button
@@ -979,6 +1031,13 @@ export default function JobDetailPage() {
         </div>
       )}
 
+      {/* Alignment Error Alert */}
+      {alignmentError && (
+        <div style={{ marginBottom: 16 }}>
+          <Alert type="error" msg={alignmentError} />
+        </div>
+      )}
+
       {/* Score Modal (Phase 6) */}
       {activeScoreModal && (
         <ScoreModal
@@ -986,6 +1045,16 @@ export default function JobDetailPage() {
           onClose={() => setActiveScoreModal(null)}
           onRescore={() => handleScoreSession(activeScoreModal.session_id)}
           isRescoring={scoringSessionId === activeScoreModal.session_id}
+        />
+      )}
+
+      {/* Alignment Modal (Phase 7) */}
+      {activeAlignmentModal && (
+        <AlignmentModal
+          data={activeAlignmentModal}
+          onClose={() => setActiveAlignmentModal(null)}
+          onRecalculate={() => handleRecalculateAlignment(activeAlignmentModal.session_id)}
+          isCalculating={loadingAlignmentId === activeAlignmentModal.session_id}
         />
       )}
     </div>

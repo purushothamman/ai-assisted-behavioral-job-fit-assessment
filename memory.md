@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Current Phase
-Phase 6 -- Candidate Response Analysis & Scoring -- COMPLETE
+Phase 7 -- Job-Candidate Behavioral Alignment -- COMPLETE
 
 ## Completed
 ### Phase 0
@@ -100,44 +100,70 @@ Phase 6 -- Candidate Response Analysis & Scoring -- COMPLETE
   - GET  /api/sessions/{session_id}/scores (returns full summary, scores, and explainable evidence)
 - [x] Backend: app/main.py updated -- scoring router registered
 - [x] Backend: tests/test_scoring.py -- 55 comprehensive tests (11 preprocessor, 18 rubric, 10 analyzer, 10 API, 6 service helpers)
-- [x] Backend: ALL 138 TESTS PASSING (0 errors, 1 upstream warning)
 - [x] Database: docs/supabase_schema.sql -- response_scores table + indexes + RLS (lines 708-759)
 - [x] Frontend: services/api.js -- scoringApi added (scoreSession, getScores)
-- [x] Frontend: components/ScoreModal.jsx -- CREATED:
-  - Overall Fit Score (0-100) with color-coded circular badge
-  - Scored responses count & NLP confidence rating
-  - Dimension-level progress bars
-  - Per-response expandable cards with question, dimension, status, indicator scores, and text quotes
-  - Re-Score action trigger
-- [x] Frontend: pages/JobDetailPage.jsx -- updated:
-  - Added "⚡ Score / Re-Score" and "📊 View Scores" buttons to completed sessions
-  - Integrated ScoreModal display
+- [x] Frontend: components/ScoreModal.jsx -- CREATED
+- [x] Frontend: pages/JobDetailPage.jsx -- updated with Score / Re-Score and View Scores actions
 - [x] Frontend: Clean production build (80 modules, 0 errors)
 
+### Phase 7 -- Job-Candidate Behavioral Alignment -- COMPLETE
+- [x] Backend: app/alignment/calculator.py -- pure deterministic alignment calculation engine:
+  - Formula: sum(candidate_score * job_weight) / sum(job_weight)
+  - Per-dimension point contribution: candidate_score * (job_weight / total_weight)
+  - Dimension priority weighting: job_weight / total_weight * 100
+  - Safe handling of missing dimensions, unweighted dimensions, invalid weights, and zero-weight divisions
+  - Objective explainable strengths and review areas generation
+  - Strict compliance: NO automated hire/reject recommendations or employment decisions
+- [x] Backend: app/schemas/alignment.py -- DimensionAlignmentItem, SessionAlignmentRead, AlignmentTriggerPayload
+- [x] Backend: app/services/alignment_service.py -- orchestrates data fetching, calculation, and upserting into session_alignments
+- [x] Backend: app/api/alignment.py -- 3 endpoints:
+  - POST /api/sessions/{session_id}/alignment (calculate & save alignment)
+  - GET  /api/sessions/{session_id}/alignment (fetch single session alignment)
+  - GET  /api/jobs/{job_id}/alignments (list alignments for all candidate sessions under a job)
+- [x] Backend: app/main.py updated -- alignment router registered
+- [x] Backend: tests/test_alignment.py -- 23 comprehensive tests (13 calculator unit tests, 2 service helper tests, 8 API integration tests)
+- [x] Backend: ALL 161 TESTS PASSING (0 errors, 1 upstream warning)
+- [x] Database: docs/supabase_schema.sql -- session_alignments table + indexes + recruiter RLS (lines 760-805)
+- [x] Frontend: services/api.js -- alignmentApi added (calculate, get, listForJob)
+- [x] Frontend: components/AlignmentModal.jsx -- CREATED:
+  - Overall Alignment Score (0-100) with color-coded gauge and mathematical formula explainer
+  - Requirements assessed summary & evaluation confidence
+  - Dimension-by-dimension breakdown table with side-by-side comparison bars, job weight priority %, candidate score, and point contributions
+  - Key Behavioral Strengths panel
+  - Areas for Recruiter Review panel with objective interview inquiry guidance
+  - Compliance notice explicitly stating no automated employment decisions
+  - Recalculate trigger button
+- [x] Frontend: pages/JobDetailPage.jsx -- updated:
+  - Added "🎯 Alignment" button on completed candidate sessions
+  - Integrated AlignmentModal display and error handling
+- [x] Frontend: Clean production build (81 modules, 0 errors)
+
 ## Current Work
-N/A -- Phase 6 complete.
+N/A -- Phase 7 complete.
 
 ## Database: Apply Pending SQL
-REQUIRED before running Phase 5 candidate assessments and Phase 6 scoring in production:
+REQUIRED before running Phase 5, Phase 6, and Phase 7 features in production:
 Go to Supabase Dashboard > SQL Editor and run:
 1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies (Phase 5)
 2. Lines 708-759: response_scores table + RLS policies (Phase 6)
+3. Lines 760-805: session_alignments table + RLS policies (Phase 7)
 All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
 
 ## Pending
-- Phase 7: Results & Reporting Dashboard
+- Phase 8: Results & Reporting Dashboard
   - Advanced candidate comparisons across applicants for the same job
   - Behavioral fit matrix & radar chart visualization
   - Exportable candidate evaluation reports (PDF / print view)
-- Phase 8: Email delivery (optional)
+- Phase 9: Email delivery (optional)
   - Send candidate invite links by email (Resend / SendGrid)
 
 ## Important Decisions
 - Python version: 3.14.2 (user system) -- pydantic>=2.13 + pydantic-core>=2.46 for Py3.14 support
 - Groq model: llama3-70b-8192 (env var override available)
 - NLP embedding model: all-MiniLM-L6-v2 (sentence-transformers)
-- Scoring determinism: 100% calculated by Python logic & cosine similarity rubrics (NO Groq hallucination in scores)
-- Indicator thresholds: Strong match >= 0.65 similarity (2 pts); Partial match >= 0.40 similarity (1 pt); None < 0.40 (0 pts)
+- Scoring & Alignment determinism: 100% calculated by Python logic & cosine similarity rubrics (NO Groq hallucination in scores)
+- Alignment formula: sum(candidate_score * job_weight) / sum(job_weight)
+- Decision ethics: Strictly objective behavioral analytics; NO automated hire/reject recommendations or employment decisions
 - Candidate access: UUID token, no Supabase Auth
 - Database: Supabase PostgreSQL only -- no local DB
 - RLS: enforced on ALL tables; service-role key used in backend only
@@ -145,7 +171,7 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
 - Frontend: Vite 8 (Rolldown bundler) + React 19 + Tailwind v4 + React Router v7
 
 ## Tests
-- 138/138 backend tests passing (Python 3.14.2, pytest 9.1.1)
+- 161/161 backend tests passing (Python 3.14.2, pytest 9.1.1)
   - test_health.py:      3 tests
   - test_jobs.py:       11 tests
   - test_schemas.py:     8 tests
@@ -154,8 +180,9 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
   - test_questions.py:  19 tests
   - test_sessions.py:   19 tests
   - test_scoring.py:    55 tests
-- Frontend: clean production build (80 modules, 0 errors)
+  - test_alignment.py:  23 tests
+- Frontend: clean production build (81 modules, 0 errors)
 
 ## Next Step
-Phase 6 is complete.
-Next step is Phase 7: Results & Reporting Dashboard (comparative analysis, fit visualizations, exportable reports).
+Phase 7 is complete.
+Next step is Phase 8: Results & Reporting Dashboard (comparative analysis, fit visualizations, exportable reports).

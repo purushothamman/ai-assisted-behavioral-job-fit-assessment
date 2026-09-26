@@ -756,3 +756,49 @@ CREATE POLICY "Recruiter can read scores for own jobs"
 
 -- Service-role handles all inserts/updates (backend scoring pipeline).
 -- No anon/candidate policy needed.
+
+
+-- =============================================================================
+-- PHASE 7 -- Job-Candidate Alignment
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- SESSION_ALIGNMENTS
+-- Deterministic job-candidate behavioral alignment results.
+-- Stores weighted overall alignment score, dimension breakdown, strengths,
+-- and areas for recruiter review.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS session_alignments (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id              UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    job_id                  UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    overall_score           FLOAT NOT NULL DEFAULT 0.0
+                                CHECK (overall_score BETWEEN 0.0 AND 100.0),
+    dimension_alignments    JSONB NOT NULL DEFAULT '[]',
+    strengths               JSONB NOT NULL DEFAULT '[]',
+    areas_for_review        JSONB NOT NULL DEFAULT '[]',
+    metadata                JSONB NOT NULL DEFAULT '{}',
+    calculated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_alignments_session_id ON session_alignments(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_alignments_job_id     ON session_alignments(job_id);
+
+COMMENT ON TABLE session_alignments IS
+    'Deterministic weighted job-candidate behavioral alignment results. '
+    'Calculated via formula sum(candidate_score * job_weight) / sum(job_weight).';
+
+ALTER TABLE session_alignments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Recruiter can read alignments for own jobs"
+    ON session_alignments FOR SELECT
+    USING (
+        job_id IN (
+            SELECT id FROM jobs WHERE recruiter_id = auth.uid()
+        )
+    );
+
+-- Service-role handles all inserts/updates for the backend alignment pipeline.
+
