@@ -56,7 +56,25 @@ class SessionService:
         self._raise_if_error(result)
         if not result.data:
             raise RuntimeError("Failed to create interview session.")
-        return result.data[0]
+        data = dict(result.data[0])
+        data.setdefault("email_status", "pending")
+        return data
+
+    # ── Update email status ──────────────────────────────────────────────────
+
+    def update_email_status(self, session_id: str, email_status: str) -> bool:
+        """
+        Update the email_status field of a session (pending/sent/failed).
+        Gracefully handles environments where the database column is not yet migrated.
+        """
+        try:
+            self._db.table("interview_sessions").update({
+                "email_status": email_status
+            }).eq("id", session_id).execute()
+            return True
+        except Exception as exc:
+            logger.warning("Could not persist email_status to database: %s", exc)
+            return False
 
     # ── Get session by ID ───────────────────────────────────────────────────
 
@@ -64,13 +82,17 @@ class SessionService:
         """Fetch a session row by its ID."""
         result = (
             self._db.table("interview_sessions")
-            .select("id, job_id, token, candidate_name, candidate_email, status, expires_at, submitted_at, created_at")
+            .select("*")
             .eq("id", session_id)
             .maybe_single()
             .execute()
         )
         self._raise_if_error(result)
-        return result.data
+        if not result.data:
+            return None
+        data = dict(result.data)
+        data.setdefault("email_status", "pending")
+        return data
 
     # ── List sessions for a job ──────────────────────────────────────────────
 
@@ -78,13 +100,18 @@ class SessionService:
         """Return all sessions for a job, newest first."""
         result = (
             self._db.table("interview_sessions")
-            .select("id, job_id, token, candidate_name, candidate_email, status, expires_at, submitted_at, created_at")
+            .select("*")
             .eq("job_id", job_id)
             .order("created_at", desc=True)
             .execute()
         )
         self._raise_if_error(result)
-        return result.data or []
+        sessions = []
+        for row in (result.data or []):
+            item = dict(row)
+            item.setdefault("email_status", "pending")
+            sessions.append(item)
+        return sessions
 
     # ── Get public session by token ─────────────────────────────────────────
 
@@ -96,13 +123,17 @@ class SessionService:
         """
         result = (
             self._db.table("interview_sessions")
-            .select("id, job_id, token, candidate_name, candidate_email, status, expires_at, submitted_at, created_at")
+            .select("*")
             .eq("token", token)
             .maybe_single()
             .execute()
         )
         self._raise_if_error(result)
-        return result.data
+        if not result.data:
+            return None
+        data = dict(result.data)
+        data.setdefault("email_status", "pending")
+        return data
 
     # ── Get approved questions for a session's job ──────────────────────────
 

@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     groq_max_tokens: int = 2048
     groq_temperature: float = 0.3
 
+    # ── Email Service (SMTP / Resend) ─────────────────────────────────────────
+    email_provider: str = "smtp"
+    smtp_server: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    resend_api_key: str = ""
+    email_from: str = "AI Job-Fit Assessment <onboarding@resend.dev>"
+    app_frontend_url: str = "http://localhost:3000"
+
     @property
     def cors_origins(self) -> list[str]:
         """Return CORS origins as a list."""

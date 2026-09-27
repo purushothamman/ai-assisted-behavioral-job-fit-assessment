@@ -20,6 +20,7 @@ class SessionCreate(BaseModel):
     candidate_name:  str = Field(..., min_length=2, max_length=200)
     candidate_email: str = Field(..., min_length=5, max_length=320)
     expires_in_days: int = Field(default=7, ge=1, le=90)
+    send_email:      bool = Field(default=True, description="Send invitation email via Resend")
 
 
 class SessionRead(BaseModel):
@@ -33,8 +34,19 @@ class SessionRead(BaseModel):
     expires_at:      Optional[datetime] = None
     submitted_at:    Optional[datetime] = None
     created_at:      Optional[datetime] = None
+    email_status:    Optional[str] = "pending"  # pending | sent | failed
+    email_error:     Optional[str] = None
+    assessment_url:  Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class RetryEmailResponse(BaseModel):
+    """Response returned when retrying an invitation email."""
+    success:      bool
+    email_status: str
+    email_error:  Optional[str] = None
+    message:      str
 
 
 # ---------------------------------------------------------------------------

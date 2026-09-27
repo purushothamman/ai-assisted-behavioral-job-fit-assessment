@@ -83,10 +83,12 @@ export default function JobDetailPage() {
   const [sessions, setSessions]             = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [showSessionForm, setShowSessionForm] = useState(false)
-  const [sessionForm, setSessionForm]       = useState({ candidate_name: '', candidate_email: '', expires_in_days: 7 })
+  const [sessionForm, setSessionForm]       = useState({ candidate_name: '', candidate_email: '', expires_in_days: 7, send_email: true })
   const [creatingSession, setCreatingSession] = useState(false)
   const [sessionError, setSessionError]     = useState('')
   const [copiedToken, setCopiedToken]       = useState(null)
+  const [retryingEmailId, setRetryingEmailId] = useState(null)
+  const [emailNotice, setEmailNotice]       = useState(null)
 
   // Scoring state (Phase 6)
   const [scoringSessionId, setScoringSessionId] = useState(null)
@@ -293,23 +295,54 @@ export default function JobDetailPage() {
     loadQuestions()
   }
 
-  // ── Session handlers (Phase 5) ──────────────────────────────────────────
+  // ── Session handlers (Phase 5 & Resend) ─────────────────────────────────
   const handleCreateSession = async (e) => {
     e.preventDefault()
-    setCreatingSession(true); setSessionError('')
+    setCreatingSession(true); setSessionError(''); setEmailNotice(null)
     try {
-      await sessionsApi.create(id, {
+      const res = await sessionsApi.create(id, {
         candidate_name:  sessionForm.candidate_name.trim(),
         candidate_email: sessionForm.candidate_email.trim(),
         expires_in_days: Number(sessionForm.expires_in_days),
+        send_email:      sessionForm.send_email ?? true,
       })
+      const created = res.data?.data || res.data || res
+      if (created.email_status === 'sent') {
+        setEmailNotice({ type: 'success', message: `✓ Candidate session created and invitation email sent to ${created.candidate_email}!` })
+      } else if (created.email_status === 'failed') {
+        setEmailNotice({
+          type: 'warning',
+          message: `✓ Candidate session created, but email sending failed: ${created.email_error || 'Check Resend key'}. You can copy the link below or retry sending.`
+        })
+      } else {
+        setEmailNotice({ type: 'success', message: '✓ Candidate session created!' })
+      }
       setShowSessionForm(false)
-      setSessionForm({ candidate_name: '', candidate_email: '', expires_in_days: 7 })
+      setSessionForm({ candidate_name: '', candidate_email: '', expires_in_days: 7, send_email: true })
       loadSessions()
     } catch (err) {
       setSessionError(err.message)
     } finally {
       setCreatingSession(false)
+    }
+  }
+
+  const handleRetryEmail = async (sessionId) => {
+    setRetryingEmailId(sessionId)
+    setEmailNotice(null)
+    try {
+      const res = await sessionsApi.retryEmail(sessionId)
+      const data = res.data?.data || res.data || res
+      if (data.email_status === 'sent') {
+        setEmailNotice({ type: 'success', message: `✓ ${data.message || 'Invitation email sent successfully!'}` })
+      } else {
+        setEmailNotice({ type: 'warning', message: `⚠️ ${data.message || data.email_error || 'Failed to send invitation email.'}` })
+      }
+      loadSessions()
+    } catch (err) {
+      setEmailNotice({ type: 'error', message: `⚠️ ${err.message || 'Error retrying invitation email.'}` })
+    } finally {
+      setRetryingEmailId(null)
     }
   }
 
@@ -895,15 +928,45 @@ export default function JobDetailPage() {
                 style={{ width: '100%' }}
               />
             </Field>
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sessionForm.send_email ?? true}
+                  onChange={e => setSessionForm(f => ({ ...f, send_email: e.target.checked }))}
+                />
+                <span>Send invitation email via Resend to candidate</span>
+              </label>
+            </div>
             {sessionError && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-danger)' }}>{sessionError}</p>}
             <button
               type="submit"
               disabled={creatingSession}
               style={{ ...btnStyle(creatingSession ? 'var(--color-border)' : 'var(--color-primary)', '#fff'), marginTop: 14, padding: '8px 20px', fontWeight: 600 }}
             >
-              {creatingSession ? 'Creating…' : 'Generate & Send Link'}
+              {creatingSession ? 'Creating & Sending…' : 'Generate & Send Link'}
             </button>
           </form>
+        )}
+
+        {/* Email feedback notice */}
+        {emailNotice && (
+          <div style={{
+            margin: '16px 24px 0',
+            padding: '10px 16px',
+            borderRadius: 8,
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            background: emailNotice.type === 'success' ? 'rgba(52,211,153,.12)' : emailNotice.type === 'warning' ? 'rgba(251,191,36,.12)' : 'rgba(239,68,68,.12)',
+            color: emailNotice.type === 'success' ? '#34d399' : emailNotice.type === 'warning' ? '#fbbf24' : '#f87171',
+            border: `1px solid ${emailNotice.type === 'success' ? 'rgba(52,211,153,.3)' : emailNotice.type === 'warning' ? 'rgba(251,191,36,.3)' : 'rgba(239,68,68,.3)'}`
+          }}>
+            <span>{emailNotice.message}</span>
+            <button onClick={() => setEmailNotice(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+          </div>
         )}
 
         {/* Sessions list */}
@@ -938,13 +1001,23 @@ export default function JobDetailPage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {session.candidate_name}
                       </span>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, flexShrink: 0 }}>
                         {statusMeta.label}
                       </span>
+                      {session.email_status === 'sent' && (
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'rgba(52,211,153,.12)', color: '#34d399', flexShrink: 0 }}>
+                          ✉️ Email Sent
+                        </span>
+                      )}
+                      {session.email_status === 'failed' && (
+                        <span title={session.email_error || 'Email delivery failed'} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'rgba(239,68,68,.12)', color: '#f87171', flexShrink: 0, cursor: 'help' }}>
+                          ⚠️ Email Failed
+                        </span>
+                      )}
                       {isExpired && session.status !== 'completed' && (
                         <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'rgba(248,113,113,.12)', color: 'var(--color-danger)', flexShrink: 0 }}>Expired</span>
                       )}
@@ -1028,6 +1101,21 @@ export default function JobDetailPage() {
                     >
                       {copiedToken === session.token ? '✓ Copied!' : '📋 Copy Link'}
                     </button>
+                    {(session.email_status === 'failed' || session.email_status === 'pending') && (
+                      <button
+                        id={`btn-retry-email-${session.id}`}
+                        onClick={() => handleRetryEmail(session.id)}
+                        disabled={retryingEmailId === session.id}
+                        style={btnStyle(
+                          retryingEmailId === session.id ? 'var(--color-border)' : 'rgba(251,191,36,.15)',
+                          '#fbbf24',
+                          '12px'
+                        )}
+                        title="Retry sending the invitation email to candidate"
+                      >
+                        {retryingEmailId === session.id ? 'Sending…' : '🔄 Retry Email'}
+                      </button>
+                    )}
                   </div>
                 </div>
               )

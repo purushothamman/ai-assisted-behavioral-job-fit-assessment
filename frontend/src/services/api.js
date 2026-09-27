@@ -79,6 +79,7 @@ export const questionsApi = {
 export const sessionsApi = {
   create:  (jobId, payload)  => api.post(`/api/jobs/${jobId}/sessions`, payload),
   list:    (jobId)           => api.get(`/api/jobs/${jobId}/sessions`),
+  retryEmail: (sessionId)    => api.post(`/api/sessions/${sessionId}/retry-email`),
   // Public — no auth required
   getByToken:      (token)   => request('GET',  `/api/sessions/${token}`),
   submitResponses: (token, payload) => request('POST', `/api/sessions/${token}/responses`, payload),

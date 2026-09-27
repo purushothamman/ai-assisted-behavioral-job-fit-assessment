@@ -264,36 +264,43 @@ Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
   6. Alignment Calculation: Calculated weighted overall Job-Fit percentage and dimension contributions via `POST /api/sessions/:id/alignment` (`HTTP 200 OK`).
   7. Assessment Report: Generated comprehensive candidate report via `GET /api/sessions/:id/report` (`HTTP 200 OK`).
 - [x] Version Control:
-  - Committed fixes with structured commit message (`b18aead`) and pushed to GitHub `origin/main`.
+  - Committed Resend & Gmail SMTP email invitation integration, Candidate Sessions UI updates, retry endpoints, and test suite. Pushed to GitHub `origin/main`.
   - Verified no `.env` files or credentials were leaked.
 
-## Current Work
-N/A -- System is fully tested, feature-complete, verified live end-to-end, and pushed to GitHub.
+- [x] Free Candidate Invitation Email Service (Option 1: Gmail SMTP + Resend Support):
+  - Added `EMAIL_PROVIDER`, `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` to `app/core/config.py`, `.env.example`, and `backend/.env`.
+  - Updated `backend/app/services/email_service.py` (`EmailService.send_assessment_invitation`):
+    - Supports **100% Free Gmail SMTP** (`smtp.gmail.com:587` with TLS) sending to **any candidate email address** without domain verification restrictions.
+    - Seamlessly falls back to Resend API when `EMAIL_PROVIDER=resend`.
+    - Features credential masking for both SMTP passwords and Resend API keys.
+  - Updated `backend/tests/test_email_service.py`: added 3 new unit tests for Gmail SMTP delivery success, missing credentials handling, and password redaction (16 email tests total).
+  - All 213/213 backend tests passing cleanly.
 
 ## Database: Apply Pending SQL
 REQUIRED before deploying to live users:
 Go to Supabase Dashboard > SQL Editor and run:
-1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies (Phase 5)
+1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies + email_status column (Phase 5)
 2. Lines 708-759: response_scores table + RLS policies (Phase 6)
 3. Lines 760-805: session_alignments table + RLS policies (Phase 7)
-All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
+All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS and are idempotent.
 
 ## Important Decisions & Final Architecture
 - **Architecture Philosophy**: Hybrid AI + Deterministic Analytics:
   - Generative AI (Groq / `openai/gpt-oss-120b`) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
   - All scoring, indicator matching, confidence ratings, and alignment calculations are 100% deterministic pure Python math. LLMs never calculate, invent, or hallucinate scores.
+  - Email Invitations: React → FastAPI → Supabase + Dual Email Engine (Gmail SMTP / Resend API). Email dispatch is non-blocking on candidate session creation; failure to send email preserves the session so recruiters can copy link or retry email.
 - **Fairness & Ethics**:
   - Zero collection or utilization of protected/sensitive demographic attributes.
   - Zero psychiatric or clinical mental health diagnosis.
   - Zero automated hiring decisions ("Hire", "Reject", "Select").
   - Mandatory ethical compliance disclaimer displayed on all reports.
   - Mandatory human recruiter oversight at all decision stages.
-- **Candidate Security**: Unguessable UUID tokens; no Supabase Auth credentials required for applicants; public schema completely conceals internal job weights, recruiter identities, and scores.
-- **Backend Stack**: FastAPI + Python 3.14 + Pydantic v2 + SentenceTransformers (`all-MiniLM-L6-v2`) + Supabase Python SDK + Groq API.
+- **Candidate Security**: Unguessable UUID tokens; no Supabase Auth credentials required for applicants; public schema completely conceals internal job weights, recruiter identities, scores, and email credentials.
+- **Backend Stack**: FastAPI + Python 3.14 + Pydantic v2 + SentenceTransformers (`all-MiniLM-L6-v2`) + Supabase Python SDK + Groq API + smtplib / Resend SDK.
 - **Frontend Stack**: Vite 8 + React 19 + Tailwind v4 + React Router v7.
 
 ## Tests
-- 197/197 backend tests passing (Python 3.14.2, pytest 9.1.1):
+- 213/213 backend tests passing (Python 3.14.2, pytest 9.1.1):
   - test_health.py:               3 tests
   - test_jobs.py:                11 tests
   - test_schemas.py:              8 tests
@@ -301,17 +308,18 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
   - test_analysis.py:            13 tests
   - test_questions.py:           19 tests
   - test_sessions.py:            19 tests
+  - test_email_service.py:       16 tests (Gmail SMTP + Resend success, failure resilience, retry, auth & key security)
   - test_scoring.py:             55 tests
   - test_alignment.py:           23 tests
   - test_reports.py:              9 tests
   - test_validation_fairness.py: 21 tests
   - test_rate_limiter.py:         6 tests
-- Frontend: clean production build (82 modules, 0 errors in 759ms)
+- Frontend: clean production build (82 modules, 0 errors in 610ms)
 
 ## Remaining Risks & Recommendations
-1. **Supabase SQL Migration**: Run lines 622-805 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates.
+1. **Supabase SQL Migration**: Run lines 622-805 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates (includes `email_status` column).
 2. **Reverse Proxy Configuration**: Ensure production ingress / reverse proxy (e.g. Nginx, Cloudflare) sets the `X-Forwarded-For` header accurately for IP rate limiting.
+3. **Gmail App Password Setup**: When using Gmail SMTP (`EMAIL_PROVIDER=smtp`), ensure **2-Step Verification** is enabled on your Google Account and enter your 16-character **App Password** in `SMTP_PASSWORD`.
 
 ## Project Status
-All Phases (0 through 10) are COMPLETE, validated live end-to-end, hardened, tested, and synchronized with GitHub main.
-System is production-ready.
+Candidate Assessment Sessions flow with Dual Email Invitations (Gmail SMTP + Resend) is COMPLETE, fully tested (213/213 passing tests), and validated with a clean frontend production build.

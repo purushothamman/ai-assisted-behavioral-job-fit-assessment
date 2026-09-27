@@ -635,10 +635,15 @@ CREATE TABLE IF NOT EXISTS interview_sessions (
     candidate_email TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending', 'in_progress', 'completed')),
+    email_status    TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (email_status IN ('pending', 'sent', 'failed')),
     expires_at      TIMESTAMPTZ,
     submitted_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Idempotent column addition for existing databases
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'pending' CHECK (email_status IN ('pending', 'sent', 'failed'));
 
 CREATE INDEX IF NOT EXISTS idx_interview_sessions_job_id ON interview_sessions(job_id);
 CREATE INDEX IF NOT EXISTS idx_interview_sessions_token  ON interview_sessions(token);
