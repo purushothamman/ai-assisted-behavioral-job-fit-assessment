@@ -242,8 +242,33 @@ Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
   - ALL 197 BACKEND TESTS PASSING (100% green in 4.27s)
   - Frontend production build verified (82 modules, 0 errors in 759ms)
 
+### Post-Hardening: Live System Verification & Bug Fixes -- COMPLETE
+- [x] Groq Model Migration (Decommissioned Model Fix):
+  - Groq decommissioned `llama3-70b-8192` with HTTP 400 `model_decommissioned`.
+  - Queried live Groq API key and verified `openai/gpt-oss-120b` supports JSON schema generation for job analysis and STAR question generation.
+  - Updated default model to `openai/gpt-oss-120b` in `backend/.env`, root `.env`, and `backend/app/core/config.py`.
+  - Added automatic fallback in `backend/app/ai/groq_client.py` to intercept deprecated LLaMA models and route them to `openai/gpt-oss-120b`.
+- [x] API Ownership & Service Signature Fixes:
+  - `JobService.get_job`: Made `recruiter_id: Optional[str] = None` to support internal service lookups, and added null-check for `result is None` to avoid `AttributeError: 'NoneType' object has no attribute 'data'`.
+  - `backend/app/api/scoring.py`: Fixed `_get_session_or_404` to pass `recruiter_id` to `JobService.get_job` and enforce ownership in both unit tests and live Supabase queries.
+  - `backend/app/api/alignment.py`: Fixed `_get_session_or_404` and `_verify_job_ownership` to pass `recruiter_id`.
+  - `backend/app/api/reports.py`: Fixed `_verify_session_access` and `_verify_job_ownership` to pass `recruiter_id`.
+- [x] Embedding Model Initialization:
+  - Downloaded and locally cached `all-MiniLM-L6-v2` weights (~80MB) at `~/.cache/huggingface/hub` for zero-latency offline embedding inference.
+- [x] Live End-to-End Walkthrough Verified:
+  1. Recruiter Auth: Logged in with confirmed recruiter credentials (`user@gmail.com`).
+  2. Job Creation & Analysis: Created "Senior Full-Stack Engineer" job, ran Groq analysis (`HTTP 201 Created`), successfully extracted and saved 6 behavioral dimensions (`leadership`, `communication`, `adaptability`, `teamwork`, `decision_making`, `stress_management`).
+  3. Question Generation: Generated 11 structured STAR interview questions mapped to confirmed dimensions.
+  4. Candidate Assessment: Generated unique session token, answered all 11 questions with detailed STAR responses via `/assess/:token`, and successfully submitted.
+  5. Response Scoring: Triggered local SentenceTransformers semantic NLP scoring via `POST /api/sessions/:id/score` (`HTTP 200 OK`); all 11 responses scored and saved to `response_scores`.
+  6. Alignment Calculation: Calculated weighted overall Job-Fit percentage and dimension contributions via `POST /api/sessions/:id/alignment` (`HTTP 200 OK`).
+  7. Assessment Report: Generated comprehensive candidate report via `GET /api/sessions/:id/report` (`HTTP 200 OK`).
+- [x] Version Control:
+  - Committed fixes with structured commit message (`b18aead`) and pushed to GitHub `origin/main`.
+  - Verified no `.env` files or credentials were leaked.
+
 ## Current Work
-N/A -- System is feature-complete and production-hardened.
+N/A -- System is fully tested, feature-complete, verified live end-to-end, and pushed to GitHub.
 
 ## Database: Apply Pending SQL
 REQUIRED before deploying to live users:
@@ -255,7 +280,7 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
 
 ## Important Decisions & Final Architecture
 - **Architecture Philosophy**: Hybrid AI + Deterministic Analytics:
-  - Generative AI (Groq / Llama 3 70B) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
+  - Generative AI (Groq / `openai/gpt-oss-120b`) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
   - All scoring, indicator matching, confidence ratings, and alignment calculations are 100% deterministic pure Python math. LLMs never calculate, invent, or hallucinate scores.
 - **Fairness & Ethics**:
   - Zero collection or utilization of protected/sensitive demographic attributes.
@@ -264,7 +289,7 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
   - Mandatory ethical compliance disclaimer displayed on all reports.
   - Mandatory human recruiter oversight at all decision stages.
 - **Candidate Security**: Unguessable UUID tokens; no Supabase Auth credentials required for applicants; public schema completely conceals internal job weights, recruiter identities, and scores.
-- **Backend Stack**: FastAPI + Python 3.14 + Pydantic v2 + SentenceTransformers (`all-MiniLM-L6-v2`) + Supabase Python SDK.
+- **Backend Stack**: FastAPI + Python 3.14 + Pydantic v2 + SentenceTransformers (`all-MiniLM-L6-v2`) + Supabase Python SDK + Groq API.
 - **Frontend Stack**: Vite 8 + React 19 + Tailwind v4 + React Router v7.
 
 ## Tests
@@ -288,5 +313,5 @@ All statements use CREATE TABLE IF NOT EXISTS and are idempotent.
 2. **Reverse Proxy Configuration**: Ensure production ingress / reverse proxy (e.g. Nginx, Cloudflare) sets the `X-Forwarded-For` header accurately for IP rate limiting.
 
 ## Project Status
-All Phases (0 through 10) are COMPLETE, validated, hardened, and tested.
+All Phases (0 through 10) are COMPLETE, validated live end-to-end, hardened, tested, and synchronized with GitHub main.
 System is production-ready.
