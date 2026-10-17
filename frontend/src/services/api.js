@@ -30,7 +30,13 @@ async function request(method, path, body = null) {
   const data = await res.json();
 
   if (!res.ok) {
-    const msg = data?.detail || data?.message || `Request failed (${res.status})`;
+    // Pydantic validation errors come back as detail: [{msg, loc, ...}]
+    let msg;
+    if (Array.isArray(data?.detail)) {
+      msg = data.detail.map(e => `${e.loc?.join('.')}: ${e.msg}`).join('; ');
+    } else {
+      msg = data?.detail || data?.message || `Request failed (${res.status})`;
+    }
     throw new Error(msg);
   }
 
@@ -41,6 +47,7 @@ async function request(method, path, body = null) {
 export const api = {
   get:    (path)         => request("GET",    path),
   post:   (path, body)   => request("POST",   path, body),
+  put:    (path, body)   => request("PUT",    path, body),
   patch:  (path, body)   => request("PATCH",  path, body),
   delete: (path)         => request("DELETE", path),
 };
@@ -104,6 +111,24 @@ export const reportsApi = {
   getJobSummary: (jobId)     => api.get(`/api/jobs/${jobId}/reports/summary`),
 };
 
+
+// ── Admin Framework endpoints (Phase 11) ──────────────────────────────────
+export const adminFrameworkApi = {
+  listVersions:       ()                  => api.get('/api/admin/framework/versions'),
+  getCurrentVersion:  ()                  => api.get('/api/admin/framework/current'),
+  validateFramework:  ()                  => api.post('/api/admin/framework/validate'),
+  publishVersion:     (payload)           => api.post('/api/admin/framework/publish', payload),
+  listDimensions:     (includeArchived = true) =>
+    api.get(`/api/admin/dimensions${includeArchived ? '?include_archived=true' : '?include_archived=false'}`),
+  getDimension:       (id)                => api.get(`/api/admin/dimensions/${id}`),
+  createDimension:    (payload)           => api.post('/api/admin/dimensions', payload),
+  updateDimension:    (id, payload)       => api.put(`/api/admin/dimensions/${id}`, payload),
+  archiveDimension:   (id)                => api.delete(`/api/admin/dimensions/${id}`),
+  reorderDimensions:  (items)             => api.patch('/api/admin/dimensions/reorder', { items }),
+  addIndicator:       (dimId, payload)    => api.post(`/api/admin/dimensions/${dimId}/indicators`, payload),
+  updateIndicator:    (indId, payload)    => api.put(`/api/admin/indicators/${indId}`, payload),
+  deleteIndicator:    (indId)             => api.delete(`/api/admin/indicators/${indId}`),
+};
 
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 export const authApi = {

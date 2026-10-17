@@ -132,16 +132,16 @@ AI-Assisted Behavioral Job-Fit Assessment
         smtp_user = self._settings.smtp_user.strip()
         smtp_pass = self._settings.smtp_password.strip()
 
-        # Decide provider: use SMTP if configured or requested; fallback to Resend if configured
-        if provider == "smtp" or (smtp_user and smtp_pass):
-            return self._send_via_smtp(
+        # Decide provider: use Resend if explicitly requested; otherwise use SMTP
+        if provider == "resend":
+            return self._send_via_resend(
                 to_email=to_email,
                 subject=subject,
                 html_content=html_content,
                 text_content=text_content,
             )
         else:
-            return self._send_via_resend(
+            return self._send_via_smtp(
                 to_email=to_email,
                 subject=subject,
                 html_content=html_content,

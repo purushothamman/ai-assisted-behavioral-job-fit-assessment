@@ -11,7 +11,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import alignment, analysis, auth, dimensions, health, jobs, questions, reports, scoring, sessions
+from app.api import (
+    admin_framework,
+    alignment,
+    analysis,
+    auth,
+    dimensions,
+    health,
+    jobs,
+    questions,
+    reports,
+    scoring,
+    sessions,
+)
 from app.core.config import get_settings
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -60,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(dimensions.router, prefix="/api")
+    app.include_router(admin_framework.router, prefix="/api")
     app.include_router(analysis.router, prefix="/api")
     app.include_router(questions.router, prefix="/api")
     app.include_router(sessions.router, prefix="/api")

@@ -1,8 +1,6 @@
-// src/pages/DimensionsPage.jsx
-// Displays all 6 behavioral dimensions and their observable indicators.
-// Recruiters use this to understand the assessment framework before creating jobs.
-
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../context/useAuth'
 import { dimensionsApi } from '../services/api'
 
 // Color palette: one accent color per dimension (cycles if more than 6)
@@ -25,6 +23,7 @@ const LABEL_MAP = {
 }
 
 export default function DimensionsPage() {
+  const { isAdmin } = useAuth()
   const [dimensions, setDimensions] = useState([])
   const [selected, setSelected]     = useState(null)   // full detail with indicators
   const [loading, setLoading]       = useState(true)
@@ -70,12 +69,61 @@ export default function DimensionsPage() {
 
   return (
     <div style={styles.page}>
+      {/* Admin Shortcut Banner */}
+      {isAdmin && (
+        <div style={{
+          marginBottom: 24,
+          padding: '12px 16px',
+          borderRadius: 12,
+          background: 'rgba(236, 72, 153, 0.1)',
+          border: '1px solid rgba(236, 72, 153, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#f472b6',
+          fontSize: 13,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>⚙️</span>
+            <span>You are logged in as an <strong>Administrator</strong>. You can configure dimensions, indicators, and framework versions.</span>
+          </div>
+          <Link
+            to="/admin/framework"
+            style={{
+              background: '#db2777',
+              color: '#ffffff',
+              padding: '6px 14px',
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Manage Framework &rarr;
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div style={styles.header}>
-        <h1 style={styles.h1}>Behavioral Framework</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={styles.h1}>Behavioral Framework</h1>
+          <span style={{
+            fontSize: 12,
+            fontWeight: 700,
+            padding: '2px 10px',
+            borderRadius: 9999,
+            background: 'rgba(99, 102, 241, 0.15)',
+            color: '#818cf8',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+          }}>
+            {dimensions.length} Active Dimensions
+          </span>
+        </div>
         <p style={styles.subtitle}>
-          The six dimensions used to assess candidate suitability.
-          Click a dimension to explore its observable indicators.
+          The standardized behavioral dimensions and observable indicators used to evaluate candidate responses.
+          Click any competency to inspect its targeted indicators.
         </p>
       </div>
 
@@ -83,7 +131,7 @@ export default function DimensionsPage() {
       <div style={styles.grid}>
         {dimensions.map((dim, i) => {
           const palette  = DIM_COLORS[i % DIM_COLORS.length]
-          const label    = LABEL_MAP[dim.name] ?? dim.name
+          const label    = LABEL_MAP[dim.name] ?? dim.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
           const isOpen   = selected?.id === dim.id
 
           return (

@@ -23,12 +23,11 @@ from app.ai.question_schemas import GeneratedQuestion, QuestionGeneratorOutput
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Prompt templates
+# Default Prompt templates
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """\
-You are a behavioral interview designer specialised in structured STAR-format \
-interviews.
+DEFAULT_SYSTEM_PROMPT = """\
+You are a behavioral interview designer specialised in structured STAR-format interviews.
 
 Given a job description and a list of confirmed behavioral dimensions, generate \
 targeted behavioral interview questions. Each question must:
@@ -40,7 +39,7 @@ You MUST respond with a JSON object in EXACTLY this format:
 {
   "questions": [
     {
-      "dimension": "<one of the six dimension names>",
+      "dimension": "<one of the valid dimension names>",
       "question": "<the full interview question>",
       "type": "<behavioral|situational|competency>",
       "difficulty": "<easy|medium|hard>",
@@ -49,8 +48,51 @@ You MUST respond with a JSON object in EXACTLY this format:
   ]
 }
 
-The six valid dimension names (use underscores):
+The six default valid dimension names (use underscores):
   communication, teamwork, adaptability, decision_making, leadership, stress_management
+
+Rules:
+- Generate 2–3 questions per dimension provided. No more, no less.
+- type must be exactly one of: behavioral, situational, competency.
+- difficulty must be exactly one of: easy, medium, hard.
+- indicators: list 2–4 specific, observable signals that distinguish a strong answer.
+- question must be a complete, open-ended sentence (not a heading).
+- Do NOT include markdown, commentary, or any keys outside the schema.
+"""
+
+SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
+
+
+def build_dynamic_question_system_prompt(dimension_names: List[str]) -> str:
+    """Build a dynamic question generation prompt specifying confirmed dimensions."""
+    if not dimension_names:
+        return DEFAULT_SYSTEM_PROMPT
+
+    dims_str = ", ".join(sorted(set(dimension_names)))
+    return f"""\
+You are a behavioral interview designer specialised in structured STAR-format interviews.
+
+Given a job description and a list of confirmed behavioral dimensions, generate \
+targeted behavioral interview questions. Each question must:
+- Follow the STAR format (Situation, Task, Action, Result).
+- Be directly relevant to the specific role and dimension.
+- Include observable indicators of a strong response.
+
+You MUST respond with a JSON object in EXACTLY this format:
+{{
+  "questions": [
+    {{
+      "dimension": "<one of the valid dimension names below>",
+      "question": "<the full interview question>",
+      "type": "<behavioral|situational|competency>",
+      "difficulty": "<easy|medium|hard>",
+      "indicators": ["<observable indicator 1>", "<observable indicator 2>", ...]
+    }}
+  ]
+}}
+
+The valid dimension names for this job (use underscores):
+  {dims_str}
 
 Rules:
 - Generate 2–3 questions per dimension provided. No more, no less.
@@ -125,14 +167,17 @@ def generate_questions(
             "Please confirm at least one requirement before generating questions."
         )
 
+    confirmed_dim_names = [r["dimension_name"] for r in confirmed if r.get("dimension_name")]
+    system_prompt = build_dynamic_question_system_prompt(confirmed_dim_names)
     user_prompt = _build_user_prompt(title, description, confirmed)
 
     logger.info(
-        "Calling Groq to generate questions for '%s' (%d confirmed dimensions).",
+        "Calling Groq to generate questions for '%s' (%d confirmed dimensions: %s).",
         title,
         len(confirmed),
+        ", ".join(confirmed_dim_names),
     )
-    raw = call_groq_json(SYSTEM_PROMPT, user_prompt, max_tokens=2048)
+    raw = call_groq_json(system_prompt, user_prompt, max_tokens=2048)
 
     try:
         output = QuestionGeneratorOutput.model_validate(raw)

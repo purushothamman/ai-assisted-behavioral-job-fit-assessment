@@ -3,14 +3,16 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminRoute from './components/AdminRoute'
 
-import LoginPage       from './pages/LoginPage'
-import DashboardPage   from './pages/DashboardPage'
-import DimensionsPage  from './pages/DimensionsPage'
-import JobsPage        from './pages/JobsPage'
-import CreateJobPage   from './pages/CreateJobPage'
-import JobDetailPage   from './pages/JobDetailPage'
-import CandidatePage   from './pages/CandidatePage'
+import LoginPage            from './pages/LoginPage'
+import DashboardPage        from './pages/DashboardPage'
+import DimensionsPage       from './pages/DimensionsPage'
+import AdminFrameworkPage   from './pages/AdminFrameworkPage'
+import JobsPage             from './pages/JobsPage'
+import CreateJobPage        from './pages/CreateJobPage'
+import JobDetailPage        from './pages/JobDetailPage'
+import CandidatePage        from './pages/CandidatePage'
 import AssessmentReportPage from './pages/AssessmentReportPage'
 
 export default function App() {
@@ -37,6 +39,9 @@ export default function App() {
                 <Route path="/jobs/:id"   element={<ProtectedRoute><JobDetailPage /></ProtectedRoute>} />
                 <Route path="/jobs/:jobId/sessions/:sessionId/report" element={<ProtectedRoute><AssessmentReportPage /></ProtectedRoute>} />
 
+                {/* Protected — platform administrator only */}
+                <Route path="/admin/framework" element={<AdminRoute><AdminFrameworkPage /></AdminRoute>} />
+
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
@@ -47,4 +52,3 @@ export default function App() {
     </AuthProvider>
   )
 }
-

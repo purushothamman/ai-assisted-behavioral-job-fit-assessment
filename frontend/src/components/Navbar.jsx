@@ -1,9 +1,9 @@
 // src/components/Navbar.jsx
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 
 export default function Navbar() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, isAdmin, role } = useAuth()
   const navigate = useNavigate()
 
   const handleSignOut = async () => {
@@ -23,7 +23,7 @@ export default function Navbar() {
       </Link>
 
       {/* Nav links */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-5">
         {user && (
           <>
             <Link to="/dashboard" className="text-sm transition-colors"
@@ -44,13 +44,44 @@ export default function Navbar() {
                   onMouseLeave={e => e.target.style.color = 'var(--color-muted)'}>
               Jobs
             </Link>
-            <button onClick={handleSignOut}
-                    className="text-sm px-3 py-1.5 rounded-lg transition-colors cursor-pointer border-0"
-                    style={{ background: 'var(--color-surface-2)', color: 'var(--color-muted)' }}
-                    onMouseEnter={e => { e.target.style.background = 'var(--color-border)'; e.target.style.color = 'var(--color-text)' }}
-                    onMouseLeave={e => { e.target.style.background = 'var(--color-surface-2)'; e.target.style.color = 'var(--color-muted)' }}>
-              Sign out
-            </button>
+
+            {/* Admin Framework Manager link — authorized administrators only */}
+            {isAdmin && (
+              <Link
+                to="/admin/framework"
+                id="nav-admin-framework"
+                className="text-xs transition-all flex items-center gap-1.5 px-3 py-1.5 rounded-lg no-underline font-medium hover:scale-105"
+                style={{
+                  background: 'rgba(236, 72, 153, 0.12)',
+                  color: '#f472b6',
+                  border: '1px solid rgba(236, 72, 153, 0.3)',
+                }}
+              >
+                <span>⚙️</span>
+                <span>Framework Manager</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300">
+                  Admin
+                </span>
+              </Link>
+            )}
+
+            <div className="flex items-center gap-3 pl-2 border-l border-slate-700">
+              <span className="text-xs px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold"
+                    style={{
+                      background: isAdmin ? 'rgba(236, 72, 153, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                      color: isAdmin ? '#f472b6' : '#818cf8',
+                      border: `1px solid ${isAdmin ? 'rgba(236, 72, 153, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                    }}>
+                {role}
+              </span>
+              <button onClick={handleSignOut}
+                      className="text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer border-0 font-medium"
+                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-muted)' }}
+                      onMouseEnter={e => { e.target.style.background = 'var(--color-border)'; e.target.style.color = 'var(--color-text)' }}
+                      onMouseLeave={e => { e.target.style.background = 'var(--color-surface-2)'; e.target.style.color = 'var(--color-muted)' }}>
+                Sign out
+              </button>
+            </div>
           </>
         )}
       </div>

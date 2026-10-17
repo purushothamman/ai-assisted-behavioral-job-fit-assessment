@@ -78,6 +78,19 @@ async def analyze_job_endpoint(
             detail="Job must have a description before it can be analyzed.",
         )
 
+    # Retrieve active framework dimensions and version
+    active_dims = None
+    active_version_id = None
+    try:
+        from app.services.framework_service import FrameworkService
+        fw_svc = FrameworkService()
+        active_ver = fw_svc.get_active_version()
+        if active_ver:
+            active_version_id = active_ver.get("id")
+            active_dims = active_ver.get("dimensions_snapshot")
+    except Exception:
+        pass
+
     # Call Groq
     try:
         requirements = analyze_job(
@@ -85,6 +98,7 @@ async def analyze_job_endpoint(
             description=job.get("description", ""),
             responsibilities=job.get("responsibilities", "") or "",
             requirements=job.get("requirements", "") or "",
+            dimensions=active_dims,
         )
     except GroqError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -97,9 +111,13 @@ async def analyze_job_endpoint(
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Advance job status to 'analyzed'
+    # Advance job status to 'analyzed' and pin framework version
     try:
-        job_svc.update_job(str(job_id), current_user["id"], _AnalyzedStatus())
+        job_svc.update_job(
+            str(job_id),
+            current_user["id"],
+            _AnalyzedStatus(framework_version_id=active_version_id),
+        )
     except Exception:
         pass  # Non-fatal: status update failure should not block the response
 
@@ -111,8 +129,14 @@ async def analyze_job_endpoint(
 
 class _AnalyzedStatus:
     """Minimal duck-typed payload for JobService.update_job status change."""
+    def __init__(self, framework_version_id: Optional[str] = None):
+        self.framework_version_id = framework_version_id
+
     def model_dump(self, exclude_none=True):  # noqa: D102
-        return {"status": "analyzed"}
+        payload = {"status": "analyzed"}
+        if self.framework_version_id:
+            payload["framework_version_id"] = str(self.framework_version_id)
+        return payload
 
 
 # ── GET /jobs/{job_id}/requirements ───────────────────────────────────────

@@ -45,10 +45,25 @@ async def get_current_user(
         response = client.auth.get_user(token)
         if response is None or response.user is None:
             raise ValueError("No user returned")
+        role = (response.user.user_metadata or {}).get("role")
+        if not role:
+            try:
+                prof_res = (
+                    client.table("profiles")
+                    .select("role")
+                    .eq("id", response.user.id)
+                    .maybe_single()
+                    .execute()
+                )
+                if prof_res and prof_res.data:
+                    role = prof_res.data.get("role", "recruiter")
+            except Exception:
+                role = "recruiter"
+
         return {
             "id": response.user.id,
             "email": response.user.email,
-            "role": response.user.user_metadata.get("role", "recruiter"),
+            "role": role or "recruiter",
         }
     except Exception as exc:
         logger.warning("Token validation failed: %s", exc)
@@ -61,8 +76,7 @@ async def get_current_user(
 
 async def require_recruiter(user: dict = Security(get_current_user)) -> dict:
     """
-    Dependency that additionally asserts the caller is a recruiter.
-    Extend this when more roles are added.
+    Dependency that additionally asserts the caller is a recruiter or admin.
     """
     if user.get("role") not in ("recruiter", "admin"):
         raise HTTPException(
@@ -70,3 +84,17 @@ async def require_recruiter(user: dict = Security(get_current_user)) -> dict:
             detail="Recruiter access required",
         )
     return user
+
+
+async def require_admin(user: dict = Security(get_current_user)) -> dict:
+    """
+    Dependency that asserts the caller is an authorized platform administrator.
+    Recruiters and other roles are strictly forbidden.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return user
+

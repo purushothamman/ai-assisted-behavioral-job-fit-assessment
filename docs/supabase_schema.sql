@@ -807,3 +807,150 @@ CREATE POLICY "Recruiter can read alignments for own jobs"
 
 -- Service-role handles all inserts/updates for the backend alignment pipeline.
 
+
+-- =============================================================================
+-- PHASE 11 -- Admin-Managed Behavioral Framework & Versioning
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- FRAMEWORK_VERSIONS
+-- Stores published behavioral framework versions and frozen dimension snapshots.
+-- Historical assessments and jobs reference the version active at their creation.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS framework_versions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    version_number      INT NOT NULL UNIQUE,
+    name                TEXT NOT NULL,
+    description         TEXT,
+    status              TEXT NOT NULL DEFAULT 'draft'
+                            CHECK (status IN ('draft', 'active', 'archived')),
+    dimensions_snapshot JSONB NOT NULL DEFAULT '[]',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    activated_at        TIMESTAMPTZ,
+    created_by          UUID REFERENCES profiles(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_framework_versions_status         ON framework_versions(status);
+CREATE INDEX IF NOT EXISTS idx_framework_versions_version_number ON framework_versions(version_number);
+
+COMMENT ON TABLE framework_versions IS
+    'Published framework versions with frozen JSONB snapshots of active dimensions and indicators.';
+
+-- ---------------------------------------------------------------------------
+-- ALTER EXISTING TABLES (Idempotent for existing databases)
+-- ---------------------------------------------------------------------------
+
+-- 1. behavioral_dimensions additions
+ALTER TABLE behavioral_dimensions ADD COLUMN IF NOT EXISTS order_index INT NOT NULL DEFAULT 0;
+ALTER TABLE behavioral_dimensions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'draft', 'archived'));
+ALTER TABLE behavioral_dimensions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- 2. behavioral_indicators additions
+ALTER TABLE behavioral_indicators ADD COLUMN IF NOT EXISTS order_index INT NOT NULL DEFAULT 0;
+ALTER TABLE behavioral_indicators ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE behavioral_indicators ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- 3. jobs additions
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS framework_version_id UUID REFERENCES framework_versions(id);
+CREATE INDEX IF NOT EXISTS idx_jobs_framework_version_id ON jobs(framework_version_id);
+
+-- ---------------------------------------------------------------------------
+-- ROW LEVEL SECURITY FOR PHASE 11
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE framework_versions ENABLE ROW LEVEL SECURITY;
+
+-- Public/recruiter read for framework versions
+DROP POLICY IF EXISTS "framework_versions: public read" ON framework_versions;
+CREATE POLICY "framework_versions: public read" ON framework_versions
+    FOR SELECT USING (TRUE);
+
+-- Platform Admin write permissions for framework versions
+DROP POLICY IF EXISTS "framework_versions: admin write" ON framework_versions;
+CREATE POLICY "framework_versions: admin write" ON framework_versions
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+-- Platform Admin write permissions for dimensions & indicators
+DROP POLICY IF EXISTS "dimensions: admin write" ON behavioral_dimensions;
+CREATE POLICY "dimensions: admin write" ON behavioral_dimensions
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+DROP POLICY IF EXISTS "indicators: admin write" ON behavioral_indicators;
+CREATE POLICY "indicators: admin write" ON behavioral_indicators
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+-- ---------------------------------------------------------------------------
+-- SEED DATA: Framework Version 1.0 (Idempotent)
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+    v1_id UUID;
+    v1_snapshot JSONB;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM framework_versions WHERE version_number = 1) THEN
+        -- Build frozen snapshot from seeded 6 core dimensions and indicators
+        SELECT jsonb_agg(
+            jsonb_build_object(
+                'id', d.id,
+                'name', d.name,
+                'description', d.description,
+                'order_index', d.order_index,
+                'status', d.status,
+                'is_active', d.is_active,
+                'indicators', COALESCE((
+                    SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'id', i.id,
+                            'name', i.name,
+                            'description', i.description,
+                            'example_behaviors', i.example_behaviors,
+                            'order_index', i.order_index,
+                            'is_active', i.is_active
+                        )
+                        ORDER BY i.order_index ASC, i.name ASC
+                    )
+                    FROM behavioral_indicators i
+                    WHERE i.dimension_id = d.id AND i.is_active = TRUE
+                ), '[]'::jsonb)
+            )
+            ORDER BY d.order_index ASC, d.name ASC
+        )
+        INTO v1_snapshot
+        FROM behavioral_dimensions d
+        WHERE d.is_active = TRUE;
+
+        INSERT INTO framework_versions (
+            version_number,
+            name,
+            description,
+            status,
+            dimensions_snapshot,
+            activated_at
+        ) VALUES (
+            1,
+            'v1.0 - Default 6-Dimension Behavioral Framework',
+            'Initial platform framework comprising the 6 core behavioral dimensions: Communication, Teamwork, Adaptability, Decision Making, Leadership, and Stress Management.',
+            'active',
+            COALESCE(v1_snapshot, '[]'::jsonb),
+            NOW()
+        ) RETURNING id INTO v1_id;
+
+        -- Attach any unpinned historical jobs to framework v1
+        UPDATE jobs SET framework_version_id = v1_id WHERE framework_version_id IS NULL;
+    END IF;
+END $$;
+
+

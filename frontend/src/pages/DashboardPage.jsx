@@ -1,7 +1,7 @@
 // src/pages/DashboardPage.jsx
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import { jobsApi } from '../services/api'
 
 function StatCard({ label, value, color }) {

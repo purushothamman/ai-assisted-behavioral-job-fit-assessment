@@ -1,4 +1,4 @@
-﻿# System Architecture
+# System Architecture
 
 ## AI-Assisted Behavioral Job-Fit Assessment
 
@@ -576,3 +576,53 @@ evaluation_dataset.csv:
   groups (if voluntary disclosure data is available)
 - Evaluate consistency: same answer -> same score across runs
 - Evaluate evidence grounding: every score has an evidence chain
+
+---
+
+## 11. Admin-Managed Behavioral Framework & Versioning (Phase 11)
+
+### 11.1 Dynamic Framework Architecture
+
+```
+Platform Administrator (role: admin)
+         |
+         v
+Admin REST API (/api/admin/*) [require_admin dependency]
+         |
+         +---> Dimension & Indicator Management (CRUD, reorder, validate)
+         +---> Pre-Activation Quality Gate (min 3 dims, min 2 indicators/dim)
+         +---> Immutable Snapshot Freezing (framework_versions table)
+         |
+         v
+Active Version Snapshot
+         |
+         +---> Groq Job Analyzer: Dynamic system prompt with active competencies
+         +---> Groq Question Generator: Dynamic STAR prompts with active indicators
+         +---> NLP Scoring: SentenceTransformers evaluated against custom indicators
+         +---> Pure Math Alignment: Dynamic weighted scoring across active dimensions
+         +---> Historical Assessments: Retain immutable original competency snapshots
+```
+
+### 11.2 Role-Based Access Control
+
+| Role | Permissions |
+|------|-------------|
+| Platform Administrator (`role: admin`) | Create, update, reorder, delete/archive dimensions; manage observable indicators; trigger validation; freeze and publish framework releases. Access to `/admin/framework`. |
+| Recruiter (`role: recruiter`) | Create job descriptions, trigger AI job analysis, approve requirements and questions, invite candidates, trigger scoring, view reports. Read-only access to active dimensions via `/dimensions`. |
+| Candidate (Public) | Submit STAR interview answers using single-use UUID token. Zero access to framework management, scoring parameters, or internal weights. |
+
+### 11.3 Safe Archiving vs Permanent Deletion
+
+- **Unreferenced Dimensions:** Dimensions that have zero associations in `job_requirements` or `interview_questions` are permanently deleted upon admin confirmation.
+- **Referenced Dimensions:** Dimensions that have historical job requirements or questions associated with them are safely archived (`is_active: false, status: 'archived'`). Historical candidate assessments and alignment reports remain 100% intact with zero foreign key violations.
+
+### 11.4 Versioning & Immutability
+
+1. **Validation Quality Gate:** Before a version can be published, `FrameworkService.validate_framework()` enforces:
+   - At least 3 active dimensions exist.
+   - Every active dimension possesses at least 2 observable indicators.
+   - Clean alphanumeric snake_case identifiers.
+   - Verified NLP rubric compatibility.
+2. **Snapshot Freezing:** Upon publishing, the active dimension and indicator tree is frozen into `framework_versions.dimensions_snapshot` as immutable JSONB.
+3. **Assessment Integrity:** Jobs associate with the active `framework_version_id`. Historical assessments evaluate strictly against their frozen version, ensuring that changes to the global framework never alter past candidate results.
+

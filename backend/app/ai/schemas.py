@@ -5,8 +5,43 @@ All models are validated BEFORE data is written to Supabase.
 """
 from __future__ import annotations
 
-from typing import List
+import logging
+from typing import List, Set
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_DIMENSIONS: Set[str] = {
+    "communication", "teamwork", "adaptability",
+    "decision_making", "leadership", "stress_management",
+}
+
+# Dynamic registry for custom dimensions loaded or created in the framework
+_DYNAMIC_DIMENSIONS: Set[str] = set()
+
+
+def register_valid_dimension(name: str) -> None:
+    """Register a custom dimension name in the runtime validator registry."""
+    cleaned = name.strip().lower().replace(" ", "_").replace("-", "_")
+    if cleaned:
+        _DYNAMIC_DIMENSIONS.add(cleaned)
+
+
+def get_all_valid_dimensions() -> Set[str]:
+    """Return union of default, dynamic, and database behavioral dimension names."""
+    valid = set(DEFAULT_DIMENSIONS) | _DYNAMIC_DIMENSIONS
+    try:
+        from app.db.client import get_supabase_admin
+        db = get_supabase_admin()
+        res = db.table("behavioral_dimensions").select("name").execute()
+        if res and res.data:
+            for row in res.data:
+                name = (row.get("name") or "").strip().lower()
+                if name:
+                    valid.add(name)
+    except Exception:
+        pass
+    return valid
 
 
 # ---------------------------------------------------------------------------
@@ -20,10 +55,7 @@ class DimensionRequirement(BaseModel):
     """
     dimension: str = Field(
         ...,
-        description=(
-            "One of: communication, teamwork, adaptability, "
-            "decision_making, leadership, stress_management"
-        ),
+        description="Behavioral dimension name from the active framework.",
     )
     importance: int = Field(
         ...,
@@ -40,11 +72,8 @@ class DimensionRequirement(BaseModel):
     @field_validator("dimension")
     @classmethod
     def validate_dimension(cls, v: str) -> str:
-        valid = {
-            "communication", "teamwork", "adaptability",
-            "decision_making", "leadership", "stress_management",
-        }
         normalised = v.strip().lower().replace(" ", "_").replace("-", "_")
+        valid = get_all_valid_dimensions()
         if normalised not in valid:
             raise ValueError(
                 f"Unknown dimension '{v}'. Must be one of: {sorted(valid)}"
@@ -64,6 +93,6 @@ class JobAnalysisOutput(BaseModel):
     requirements: List[DimensionRequirement] = Field(
         ...,
         min_length=1,
-        max_length=6,
-        description="One entry per relevant behavioral dimension (1–6).",
+        max_length=50,
+        description="One entry per relevant behavioral dimension.",
     )

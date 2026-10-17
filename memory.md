@@ -274,7 +274,74 @@ Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
     - Seamlessly falls back to Resend API when `EMAIL_PROVIDER=resend`.
     - Features credential masking for both SMTP passwords and Resend API keys.
   - Updated `backend/tests/test_email_service.py`: added 3 new unit tests for Gmail SMTP delivery success, missing credentials handling, and password redaction (16 email tests total).
-  - All 213/213 backend tests passing cleanly.
+
+### Phase 11 -- Admin-Managed Behavioral Framework & Versioning -- COMPLETE
+- [x] Database Schema & Migration (`docs/supabase_schema.sql` lines 811-960):
+  - Created `framework_versions` table with `version_number`, `name`, `description`, `status` ('draft', 'active', 'archived'), `dimensions_snapshot` (frozen JSONB), `activated_at`, `created_by`.
+  - Added `order_index`, `status` ('active', 'draft', 'archived'), and `updated_at` to `behavioral_dimensions`.
+  - Added `order_index`, `is_active`, and `updated_at` to `behavioral_indicators`.
+  - Added `framework_version_id` foreign key referencing `framework_versions(id)` to `jobs`.
+  - Configured RLS policies: public read for framework versions, and strict admin write policies (`profiles.role = 'admin'`) for dimensions, indicators, and framework versions.
+  - Added idempotent SQL seed logic for Version 1.0 snapshot preserving the original 6 core dimensions and pinning historical unassigned jobs.
+- [x] Security & Authorization:
+  - Implemented `require_admin` dependency in `backend/app/core/security.py` asserting caller has `role == "admin"`.
+  - Enforced `require_admin` on all management endpoints; unauthenticated callers receive HTTP 401, recruiters receive HTTP 403 Forbidden.
+  - Preserved recruiter access on candidate and assessment endpoints; recruiters cannot modify framework configurations.
+- [x] Admin Framework Backend API (`backend/app/api/admin_framework.py`):
+  - `GET    /api/admin/framework/versions`: List all framework versions.
+  - `GET    /api/admin/framework/current`: Fetch current active framework and snapshot.
+  - `POST   /api/admin/framework/validate`: Pre-activation integrity check (min 3 active dimensions, min 2 indicators per dimension, identifier and description validation).
+  - `POST   /api/admin/framework/publish`: Freezes active dimensions snapshot, supersedes previous active version, creates new version number.
+  - `GET    /api/admin/dimensions`: List all dimensions with embedded indicators and indicator counts.
+  - `POST   /api/admin/dimensions`: Create new dimension with optional initial indicators.
+  - `GET    /api/admin/dimensions/{id}`: Dimension detail with usage references count.
+  - `PUT    /api/admin/dimensions/{id}`: Update dimension properties.
+  - `DELETE /api/admin/dimensions/{id}`: Safe archive/delete (referenced dimensions are safely archived to preserve historical assessments).
+  - `PATCH  /api/admin/dimensions/reorder`: Bulk update display ordering across dimensions.
+  - `POST   /api/admin/dimensions/{id}/indicators`: Add observable behavioral indicator.
+  - `PUT    /api/admin/indicators/{id}`: Update observable indicator.
+  - `DELETE /api/admin/indicators/{id}`: Delete indicator.
+  - Registered under `/api` in `backend/app/main.py`.
+- [x] Dynamic Behavioral Framework Engine:
+  - `backend/app/ai/schemas.py`: Replaced hardcoded 6-dimension set with dynamic registry and database-backed validator supporting custom dimensions.
+  - `backend/app/ai/question_schemas.py`: Made question validator dynamic, supporting any registered or active framework dimensions.
+  - `backend/app/ai/job_analyzer.py`: Generates dynamic Groq analysis system prompt containing all active framework dimensions and observable indicator signals.
+  - `backend/app/ai/question_generator.py`: Generates dynamic STAR interview question prompt based on confirmed requirements and custom dimensions.
+  - `backend/app/services/job_requirement_service.py` & `question_service.py`: Resolves custom dimension names from `behavioral_dimensions` table dynamically.
+  - `backend/app/scoring/analyzer.py` & `rubric.py`: Preserved 100% deterministic Python NLP scoring with SentenceTransformers (`all-MiniLM-L6-v2`); evaluated against custom observable indicators without LLM hallucinations.
+  - `backend/app/alignment/calculator.py`: Verified pure math alignment weighting for any number of custom dimensions.
+  - `backend/app/services/report_service.py`: Added framework version tracking to report metadata. Historical assessments remain immutable.
+- [x] Admin UI & Frontend Management:
+  - Centralized API: added `adminFrameworkApi` methods to `frontend/src/services/api.js`.
+  - Context & Navigation: updated `frontend/src/context/AuthContext.jsx` with `role` and `isAdmin`; updated `Navbar.jsx` with prominent Admin Framework Manager link.
+  - Vite HMR Fast Refresh Fix: extracted `useAuth` hook into standalone `frontend/src/context/useAuth.js`, cleanly decoupling hook exports from `AuthProvider` component to eliminate React plugin fast-refresh compiler warnings.
+  - Route Protection: created `frontend/src/components/AdminRoute.jsx` restricting access to `role === 'admin'`.
+  - Framework Manager Page (`frontend/src/pages/AdminFrameworkPage.jsx`):
+    - Comprehensive dashboard displaying active dimensions, drafts, total indicators, and release versions.
+    - Drag / up-down dimension reordering with instant server sync.
+    - Interactive indicator management: view, create, edit, and delete observable behavioral signals per dimension.
+    - Dedicated in-modal error banners for Dimension, Indicator, and Publish modals with intelligent guidance when duplicate dimension identifiers are entered.
+    - Dynamic initial indicators with interactive row additions/removals directly inside the Create Dimension modal.
+    - Smart action buttons: displays red "Delete" for unreferenced dimensions and "Archive" for referenced dimensions.
+    - Real-time pre-activation validation checklist modal.
+    - Version publishing modal with changelog notes and staged snapshot preview.
+    - Version history tab with immutable snapshot inspector.
+  - Recruiter Dimensions View (`frontend/src/pages/DimensionsPage.jsx`): Updated with active framework badge and admin quick-action banner.
+  - Registered route `/admin/framework` in `frontend/src/App.jsx`.
+- [x] Backend Framework Service Fixes:
+  - Fixed `framework_service.py` `list_dimensions_admin` indicator dictionary grouping (`ind_by_dim`) to eliminate runtime `NameError`.
+  - Added safe `is_referenced` detection in `list_dimensions_admin` and `DimensionDetail` schema to differentiate between safe permanent deletion of unused dimensions vs archiving of historical ones.
+- [x] Test Suite:
+  - Added `backend/tests/test_admin_framework.py` with 23 comprehensive tests covering:
+    - Authorization (401 anonymous, 403 recruiter, 200 admin)
+    - Dimension and indicator CRUD
+    - Reordering
+    - Safe archiving of referenced dimensions
+    - Pre-activation framework validation
+    - Version publishing and snapshot freezing
+    - Pipeline compatibility (job analysis, questions, deterministic NLP scoring, alignment)
+  - ALL 236/236 BACKEND TESTS PASSING (100% green in 43.81s).
+  - Clean frontend production build (85 modules, 0 errors in 1.27s).
 
 ## Database: Apply Pending SQL
 REQUIRED before deploying to live users:
@@ -282,13 +349,28 @@ Go to Supabase Dashboard > SQL Editor and run:
 1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies + email_status column (Phase 5)
 2. Lines 708-759: response_scores table + RLS policies (Phase 6)
 3. Lines 760-805: session_alignments table + RLS policies (Phase 7)
+4. Lines 811-960: framework_versions table + dimension/indicator order and status columns + framework_version_id on jobs + RLS policies + Version 1.0 seed snapshot (Phase 11)
 All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS and are idempotent.
 
+## Admin Account Setup
+To grant an account Platform Administrator privileges:
+1. Register/sign in with your user email in the application.
+2. Go to Supabase Dashboard > SQL Editor and run:
+   ```sql
+   UPDATE profiles SET role = 'admin' WHERE id = (SELECT id FROM auth.users WHERE email = 'your_admin_email@example.com');
+   ```
+   Or update the user's `raw_user_meta_data`:
+   ```sql
+   UPDATE auth.users SET raw_user_meta_data = raw_user_meta_data || '{"role": "admin"}'::jsonb WHERE email = 'your_admin_email@example.com';
+   ```
+3. Refresh the application; the "⚙️ Framework Manager" navigation link will immediately appear.
+
 ## Important Decisions & Final Architecture
-- **Architecture Philosophy**: Hybrid AI + Deterministic Analytics:
+- **Architecture Philosophy**: Hybrid AI + Deterministic Analytics + Version-Controlled Frameworks:
   - Generative AI (Groq / `openai/gpt-oss-120b`) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
+  - Behavioral Framework is fully administrator-managed with versioning and immutable snapshots.
   - All scoring, indicator matching, confidence ratings, and alignment calculations are 100% deterministic pure Python math. LLMs never calculate, invent, or hallucinate scores.
-  - Email Invitations: React → FastAPI → Supabase + Dual Email Engine (Gmail SMTP / Resend API). Email dispatch is non-blocking on candidate session creation; failure to send email preserves the session so recruiters can copy link or retry email.
+  - Email Invitations: React → FastAPI → Supabase + Dual Email Engine (Gmail SMTP / Resend API).
 - **Fairness & Ethics**:
   - Zero collection or utilization of protected/sensitive demographic attributes.
   - Zero psychiatric or clinical mental health diagnosis.
@@ -300,7 +382,8 @@ All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS and 
 - **Frontend Stack**: Vite 8 + React 19 + Tailwind v4 + React Router v7.
 
 ## Tests
-- 213/213 backend tests passing (Python 3.14.2, pytest 9.1.1):
+- 236/236 backend tests passing (Python 3.14.2, pytest 9.1.1):
+  - test_admin_framework.py:     23 tests (NEW Phase 11)
   - test_health.py:               3 tests
   - test_jobs.py:                11 tests
   - test_schemas.py:              8 tests
@@ -314,12 +397,14 @@ All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS and 
   - test_reports.py:              9 tests
   - test_validation_fairness.py: 21 tests
   - test_rate_limiter.py:         6 tests
-- Frontend: clean production build (82 modules, 0 errors in 610ms)
+- Frontend: clean production build (84 modules, 0 errors in 966ms)
 
 ## Remaining Risks & Recommendations
-1. **Supabase SQL Migration**: Run lines 622-805 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates (includes `email_status` column).
+1. **Supabase SQL Migration**: Run lines 622-960 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates or activating custom frameworks.
 2. **Reverse Proxy Configuration**: Ensure production ingress / reverse proxy (e.g. Nginx, Cloudflare) sets the `X-Forwarded-For` header accurately for IP rate limiting.
 3. **Gmail App Password Setup**: When using Gmail SMTP (`EMAIL_PROVIDER=smtp`), ensure **2-Step Verification** is enabled on your Google Account and enter your 16-character **App Password** in `SMTP_PASSWORD`.
+4. **Admin Account Promotion**: Use the provided SQL snippet in Supabase SQL Editor to elevate authorized administrators.
 
 ## Project Status
-Candidate Assessment Sessions flow with Dual Email Invitations (Gmail SMTP + Resend) is COMPLETE, fully tested (213/213 passing tests), and validated with a clean frontend production build.
+Admin-Managed Behavioral Framework & Versioning (Phase 11) is COMPLETE, fully tested (236/236 passing tests), and validated with a clean frontend production build.
+

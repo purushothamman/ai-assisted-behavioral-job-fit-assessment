@@ -5,13 +5,10 @@ All models are validated BEFORE data is written to Supabase.
 """
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import List, Literal, Set
 from pydantic import BaseModel, Field, field_validator
 
-VALID_DIMENSIONS = {
-    "communication", "teamwork", "adaptability",
-    "decision_making", "leadership", "stress_management",
-}
+from app.ai.schemas import get_all_valid_dimensions
 
 VALID_TYPES = {"behavioral", "situational", "competency"}
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
@@ -24,7 +21,7 @@ class GeneratedQuestion(BaseModel):
     """
     dimension: str = Field(
         ...,
-        description="One of the six behavioral dimension names.",
+        description="One of the active framework behavioral dimension names.",
     )
     question: str = Field(
         ...,
@@ -50,9 +47,10 @@ class GeneratedQuestion(BaseModel):
     @classmethod
     def validate_dimension(cls, v: str) -> str:
         normalised = v.strip().lower().replace(" ", "_").replace("-", "_")
-        if normalised not in VALID_DIMENSIONS:
+        valid = get_all_valid_dimensions()
+        if normalised not in valid:
             raise ValueError(
-                f"Unknown dimension '{v}'. Must be one of: {sorted(VALID_DIMENSIONS)}"
+                f"Unknown dimension '{v}'. Must be one of: {sorted(valid)}"
             )
         return normalised
 

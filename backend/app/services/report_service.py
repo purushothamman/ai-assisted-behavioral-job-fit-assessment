@@ -310,6 +310,12 @@ class ReportService:
                 "total_questions": len(questions),
                 "total_responses": len(responses),
                 "total_scores":    len(scores),
+                "framework_version": (
+                    f"v{job.get('framework_version_number', 1)} - {job.get('framework_version_name', 'Default Framework')}"
+                    if job.get("framework_version_id")
+                    else "v1.0 - Default Behavioral Framework"
+                ),
+                "framework_version_id": job.get("framework_version_id"),
             },
             "generated_at":        now_utc,
         }

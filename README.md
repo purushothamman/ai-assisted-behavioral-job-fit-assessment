@@ -1,4 +1,4 @@
-﻿# AI-Assisted Behavioral Job-Fit Assessment
+# AI-Assisted Behavioral Job-Fit Assessment
 
 > **MSc Data Science Project**
 > An AI-assisted decision-support system that evaluates job-related behavioral
@@ -82,9 +82,11 @@ Human Recruiter (Final Decision)
 
 ---
 
-## 4. Behavioral Dimensions
+## 4. Behavioral Dimensions & Framework
 
-| Dimension        | Key Indicators                                                        |
+The platform includes a baseline set of six default behavioral dimensions, but is fully extensible via the **Admin-Managed Behavioral Framework Engine (Phase 11)**:
+
+| Dimension        | Key Observable Indicators                                             |
 |------------------|-----------------------------------------------------------------------|
 | Communication    | Clarity, active listening, information sharing, conflict communication |
 | Teamwork         | Collaboration, responsibility, conflict resolution, supportiveness     |
@@ -96,27 +98,38 @@ Human Recruiter (Final Decision)
 > **Note:** Stress Management evaluates only job-related behavioral responses to
 > workplace pressure. No psychological or medical conditions are assessed.
 
+Authorized Platform Administrators can create custom competencies (e.g. `strategic_thinking`, `customer_centricity`), configure observable indicators, validate framework integrity, and publish immutable versioned releases (`framework_versions`).
+
 ---
 
 ## 5. User Roles
 
-### Recruiter
+### Platform Administrator (`role: admin`)
+
+- Access the Framework Control Center at `/admin/framework`
+- Create, edit, activate/draft, reorder, and safely delete/archive dimensions
+- Manage observable behavioral indicators per dimension
+- Run pre-activation framework validation checks
+- Publish and activate new framework versions with frozen immutable snapshots
+- Inspect historical framework release snapshots
+
+### Recruiter (`role: recruiter`)
 
 - Register/login via Supabase Auth
 - Create and manage job listings
-- Review/edit AI-generated behavioral requirements
-- Generate, edit, delete, or manually add assessment questions
-- Create assessments and invite candidates
-- View candidate behavioral profiles, evidence, and alignment scores
-- Add notes and make the final hiring decision
+- Run AI-assisted behavioral job description analysis
+- Review and approve required competencies and importance weights
+- Generate, edit, delete, or manually add STAR assessment questions
+- Create assessment sessions and invite candidates via email (Gmail SMTP / Resend)
+- View candidate behavioral profiles, evidence citations, and weighted alignment scores
+- Add recruiter notes and make the final human hiring decision
 
-### Candidate
+### Candidate (Public Assessment Portal)
 
-- Access assessment via a secure link (no login required)
-- Answer behavioral/situational questions
-- Submit assessment and receive confirmation
-
-Candidates cannot access recruiter data (enforced by RLS).
+- Access assessment via a secure single-use token link (no login required)
+- Answer behavioral/situational questions using the STAR framework
+- Submit assessment responses with instant confirmation
+- Strict data isolation: candidate portal cannot access internal weights, recruiter identities, or scoring algorithms
 
 ---
 
@@ -212,20 +225,33 @@ Copy `.env.example` to `.env` and fill in all values.
 
 ## 9. Development Phases
 
-| Phase | Description                              | Status     |
-|-------|------------------------------------------|------------|
-| 0     | Planning, architecture, project structure| Complete   |
-| 1     | Supabase + FastAPI foundation            | Pending    |
-| 2     | Behavioral framework + database seed     | Pending    |
-| 3     | Groq integration                         | Pending    |
-| 4     | Job analysis pipeline                    | Pending    |
-| 5     | Question generation                      | Pending    |
-| 6     | Candidate assessment portal              | Pending    |
-| 7     | NLP + response analysis                  | Pending    |
-| 8     | Deterministic scoring + job alignment    | Pending    |
-| 9     | Recruiter dashboard + reports            | Pending    |
-| 10    | Evaluation + fairness + explainability   | Pending    |
-| 11    | Testing + polish + deployment            | Pending    |
+| Phase | Description                                                | Status     |
+|-------|------------------------------------------------------------|------------|
+| 0     | Planning, architecture, project structure                  | Complete   |
+| 1     | Supabase PostgreSQL + FastAPI security foundation          | Complete   |
+| 2     | Baseline behavioral framework + indicators seed            | Complete   |
+| 3     | Groq AI behavioral requirements extraction from JD         | Complete   |
+| 4     | AI question generation (STAR methodology)                  | Complete   |
+| 5     | Candidate assessment portal + token authentication         | Complete   |
+| 6     | SentenceTransformers NLP + deterministic rubric scoring    | Complete   |
+| 7     | Pure math job-candidate alignment weighting                | Complete   |
+| 8     | Explainable candidate evaluation reports + PDF generation  | Complete   |
+| 9     | Dual email dispatch engine (Gmail SMTP + Resend API)       | Complete   |
+| 10    | Production hardening, security, rate limiting, fairness    | Complete   |
+| 11    | Admin-managed behavioral framework & immutable versioning  | Complete   |
+
+---
+
+## 10. Platform Administrator Setup
+
+To promote an authenticated user to Platform Administrator:
+
+1. Register or log in to the application.
+2. In Supabase Dashboard > SQL Editor, execute:
+   ```sql
+   UPDATE profiles SET role = 'admin' WHERE id = (SELECT id FROM auth.users WHERE email = 'your_admin_email@example.com');
+   ```
+3. Refresh the app. The **⚙️ Framework Manager** link will appear in the navigation bar.
 
 ---
 
