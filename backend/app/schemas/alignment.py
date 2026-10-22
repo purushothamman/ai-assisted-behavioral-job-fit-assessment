@@ -10,7 +10,7 @@ Defines the contract for:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -46,6 +46,11 @@ class SessionAlignmentRead(BaseModel):
     areas_for_review:          List[str] = []
     metadata:                  Dict[str, Any] = {}
     calculated_at:             Optional[datetime] = None
+    reviewed_at:               Optional[datetime] = None
+    reviewed_by:               Optional[UUID] = None
+    review_action:             Optional[str] = None
+    recruiter_notes:           Optional[str] = None
+    override_score:            Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -53,3 +58,35 @@ class SessionAlignmentRead(BaseModel):
 class AlignmentTriggerPayload(BaseModel):
     """Optional payload when triggering alignment calculation."""
     force_recalculate: bool = False
+
+
+class SessionReviewPayload(BaseModel):
+    """Payload for recruiter oversight review on an assessment session (OV-5)."""
+    action:          Optional[str] = Field(None, description="'reviewed' | 'flagged_for_interview' | 'request_reassessment' | 'overridden' | 'completed'")
+    review_action:   Optional[str] = Field(None, description="Alias for action")
+    notes:           Optional[str] = Field(None, max_length=4000, description="Qualitative recruiter notes and observations")
+    recruiter_notes: Optional[str] = Field(None, max_length=4000, description="Alias for notes")
+    override_score:  Optional[float] = Field(None, ge=0.0, le=100.0, description="Optional human-overridden overall score")
+
+    @property
+    def resolved_action(self) -> str:
+        act = self.review_action or self.action or "reviewed"
+        return act
+
+    @property
+    def resolved_notes(self) -> Optional[str]:
+        return self.recruiter_notes if self.recruiter_notes is not None else self.notes
+
+
+class SessionReviewRead(BaseModel):
+    """Confirmation record for submitted recruiter oversight review."""
+    session_id:         UUID
+    reviewed_at:        datetime
+    reviewed_by:        Union[UUID, str]
+    review_action:      str
+    recruiter_notes:    Optional[str] = None
+    original_score:     float
+    override_score:     Optional[float] = None
+    audit_log_id:       Optional[Union[UUID, str]] = None
+    is_repeated_review: bool = False
+

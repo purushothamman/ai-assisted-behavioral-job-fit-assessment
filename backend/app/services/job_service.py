@@ -18,6 +18,24 @@ from app.schemas.jobs import JobCreate, JobStatus, JobUpdate
 logger = logging.getLogger(__name__)
 
 
+def _get_active_framework_version_id() -> Optional[str]:
+    """
+    Resolve the currently active framework version ID.
+    Returns None if no active version exists or if the framework_service
+    is unavailable (e.g. during early DB bootstrapping).
+    This is intentionally non-fatal so job creation always succeeds.
+    """
+    try:
+        from app.services.framework_service import FrameworkService  # local import to avoid circular deps
+        fw_svc = FrameworkService()
+        active_ver = fw_svc.get_active_version()
+        if active_ver:
+            return str(active_ver["id"])
+    except Exception as exc:
+        logger.debug("Could not resolve active framework version at job creation: %s", exc)
+    return None
+
+
 def _now() -> str:
     """ISO timestamp for updated_at fields."""
     return datetime.now(timezone.utc).isoformat()
@@ -32,7 +50,7 @@ class JobService:
     # ── Create ────────────────────────────────────────────────────────────────
 
     def create_job(self, recruiter_id: str, payload: JobCreate) -> dict:
-        """Insert a new job and return the full record."""
+        """Insert a new job, pinning the currently active framework version."""
         data = {
             "recruiter_id": recruiter_id,
             "title": payload.title,
@@ -41,6 +59,12 @@ class JobService:
             "requirements": payload.requirements,
             "status": JobStatus.DRAFT.value,
         }
+        # FS-4: Bind the currently active framework snapshot so historical
+        # assessments remain reproducible even if the framework changes later.
+        active_fw_id = _get_active_framework_version_id()
+        if active_fw_id:
+            data["framework_version_id"] = active_fw_id
+
         result = (
             self._db.table("jobs")
             .insert(data)

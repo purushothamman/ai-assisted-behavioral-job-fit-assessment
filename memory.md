@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Current Phase
-Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
+Phase 12 (Fairness Features) — Phase D: Recruiter Oversight and Audit Trails — COMPLETE
 
 ## Completed
 ### Phase 0
@@ -343,14 +343,168 @@ Phase 10 -- Production Hardening & Final System Evaluation -- COMPLETE
   - ALL 236/236 BACKEND TESTS PASSING (100% green in 43.81s).
   - Clean frontend production build (85 modules, 0 errors in 1.27s).
 
+### Phase 12 (Fairness Features) — Phase A: Framework Snapshot Binding — COMPLETE
+Fixes all 4 framework snapshot gaps identified in the pre-implementation audit (FS-1 → FS-4).
+Goal: Every assessment session is permanently anchored to the exact frozen framework snapshot
+that was active when the session was created. Historical reports and re-scores are reproducible
+even if an admin modifies or archives live dimensions/indicators later.
+
+- [x] **FS-4 — `backend/app/services/job_service.py`** (`create_job`):
+  - Added `_get_active_framework_version_id()` helper (local import of `FrameworkService`,
+    non-fatal — returns `None` if no active version or DB unavailable).
+  - `create_job()` now inserts `framework_version_id` on every new job row when an active
+    version exists. Fully backwards-compatible: skipped when `None`.
+
+- [x] **FS-2 — `backend/app/services/session_service.py`** (`create_session`):
+  - `create_session()` now reads `jobs.framework_version_id` and writes it to the new
+    `interview_sessions` row, freezing the snapshot link at session creation time.
+  - Graceful fallback: job lookup errors are swallowed (debug-logged); session creation
+    always succeeds.
+
+- [x] **FS-3 — `backend/app/services/scoring_service.py`** (snapshot-based indicator resolution):
+  - `get_session()` now also selects `framework_version_id`.
+  - Added `_get_snapshot_for_session(session)` — loads `framework_versions.dimensions_snapshot`
+    JSONB for the pinned version ID; returns `None` if no version is pinned.
+  - Added `_get_indicators_from_snapshot(snapshot, dimension_id, indicator_names)` — resolves
+    `dimension_name` and full indicator objects from the frozen snapshot; falls back to live DB
+    when dimension is absent from snapshot.
+  - `get_question_with_indicators(question_id, snapshot=None)` — now accepts optional snapshot;
+    snapshot path is tried first, live DB fallback is preserved.
+  - `score_session()` — loads snapshot once per session, passes it to every
+    `get_question_with_indicators()` call; logs whether scoring used snapshot or live DB.
+
+- [x] **FS-1 — `backend/app/services/report_service.py`** (framework version label):
+  - Added `_get_framework_version_label(framework_version_id)` — queries `framework_versions`
+    by the FK to get `version_number` and `name`; returns graceful fallback strings on error.
+  - Removed the two broken `job.get('framework_version_number')` /
+    `job.get('framework_version_name')` reads that referenced nonexistent `jobs` columns.
+  - `get_assessment_report()` now calls `_get_framework_version_label()` to populate
+    `metadata.framework_version` with the real DB-sourced label.
+
+- [x] **SQL Migration — `docs/migrations/phase_a_snapshot_binding.sql`** (NEW FILE):
+  - `ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS framework_version_id UUID REFERENCES framework_versions(id) ON DELETE SET NULL;`
+  - Index: `idx_interview_sessions_framework_version_id`.
+  - Idempotent (safe to re-run). Must be applied to Supabase before inviting new candidates.
+
+- [x] **Regression Tests — `backend/tests/test_phase_a_snapshot_binding.py`** (NEW FILE, 17 tests):
+  - `TestFS4JobCreationPinsFrameworkVersion` (3 tests):
+    attaches active framework ID, skips when none exists, helper swallows errors.
+  - `TestFS2SessionCreationBindsFrameworkVersion` (3 tests):
+    copies job FK, omits when job has none, succeeds if job lookup fails.
+  - `TestFS3ScoringUsesSnapshot` (6 tests):
+    snapshot loaded from DB, None returned when no FK, indicator resolution from snapshot,
+    unknown indicator fallback, unknown dimension returns None, live-DB fallback without snapshot.
+  - `TestFS1ReportFrameworkVersionLabel` (4 tests):
+    label from DB, default when None ID, fallback when DB row absent,
+    regression guard that broken job column reads are no longer used.
+
+- [x] **Phase B — Evidence-Based Scoring Explanations (ES-1 to ES-3)**:
+  - **ES-1 (Persistence & Data Structure)**:
+    - `IndicatorEvidence` dataclass in [`backend/app/scoring/rubric.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/scoring/rubric.py) updated with optional `evidence_text: Optional[str] = None` field.
+    - `build_evidence()` updated to accept and pair `evidence_texts` per indicator, retaining full backward compatibility.
+    - `ScoringService` in [`backend/app/services/scoring_service.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/services/scoring_service.py) serializes `evidence_text` into JSONB blob stored in `response_scores.evidence`.
+    - `IndicatorEvidenceRead` in [`backend/app/schemas/scoring.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/schemas/scoring.py) and `ReportEvidenceItem` in [`backend/app/schemas/report.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/schemas/report.py) define `evidence_text: Optional[str] = None`.
+  - **ES-2 (Sentence Segmentation)**:
+    - `_split_sentences()` in [`backend/app/scoring/analyzer.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/scoring/analyzer.py) splits cleaned candidate responses into sentence units via regex punctuation boundaries (`.!?`), stripping whitespace and handling empty/single-sentence edge cases cleanly.
+  - **ES-3 (Per-Sentence Embedding Grounding)**:
+    - `_extract_sentence_evidence()` in [`backend/app/scoring/analyzer.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/scoring/analyzer.py) embeds sentences in a single batch with the active embedding model, computes pairwise cosine similarity against behavioral indicators, and attributes the top-matching sentence per indicator.
+    - Respects a 0.10 similarity floor to avoid attributing unrelated sentences as false evidence.
+    - Completely exception-safe and non-blocking; returns `None` on any internal failure.
+    - Strictly additive: deterministic scoring rubric mathematics and confidence calculations remain 100% authoritative and unchanged. Cosine similarity and sentence quotes serve solely as supporting context for recruiters.
+  - **Report & Frontend Integration**:
+    - [`backend/app/services/report_service.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/services/report_service.py) extracts `evidence_text` and passes it through `questions_evidence` in candidate reports.
+    - Frontend ([`AssessmentReportPage.jsx`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/frontend/src/pages/AssessmentReportPage.jsx) and [`ScoreModal.jsx`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/frontend/src/components/ScoreModal.jsx)) displays quoted, styled evidence snippets with indicator-matched badges.
+    - Zero DDL alterations required; PostgreSQL JSONB stores new fields natively. Documented in [`docs/migrations/phase_b_evidence_explanations.sql`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/docs/migrations/phase_b_evidence_explanations.sql).
+  - **Regression Tests — `backend/tests/test_phase_b_evidence.py`** (NEW FILE, 26 tests):
+    - `TestSentenceSegmentation` (5 tests): standard punctuation, single sentences, empty/whitespace, multiple spaces/newlines, stripping.
+    - `TestSentenceEvidenceExtraction` (4 tests): top sentence matching, 0.10 similarity floor, empty answers, exception safety.
+    - `TestIndicatorEvidenceRubric` (7 tests): field existence, default None, immutability/frozen check, build_evidence, length validation, score aggregation pass-through.
+    - `TestScoringInvariance` (1 test): verifies scores and confidence ratings are 100% invariant to sentence grounding.
+    - `TestAnalyzerIntegration` (4 tests): analyze_response populates evidence, quality gate rejection handling, no indicators, safe exception wrapper.
+    - `TestScoringServicePersistence` (1 test): verified JSONB serialization in `response_scores`.
+    - `TestReportServiceEvidence` (2 tests): report generation with evidence_text, backward compatibility with legacy rows missing evidence_text.
+    - `TestSchemaValidation` (2 tests): Pydantic validation with and without evidence_text.
+
+- [x] **Phase C — Demographic Fairness Evaluation (FA-1 to FA-5)**:
+  - **FA-1 (Dedicated Module & Admin-Only Ingestion/Audit API)**:
+    - Created dedicated package [`backend/app/fairness/`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/fairness/):
+      - [`metrics.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/fairness/metrics.py): 100% pure Python, deterministic metric calculation with zero network dependencies.
+      - [`schemas.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/fairness/schemas.py): Pydantic v2 schemas for controlled evaluation records, dataset ingestion, audit requests, and reports.
+      - [`service.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/fairness/service.py): `FairnessService` managing dataset ingestion, validation, persistence, and audit runs with memory fallback.
+    - Created admin API router [`backend/app/api/fairness.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/api/fairness.py) registered in [`backend/app/main.py`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/backend/app/main.py):
+      - `POST /api/fairness/datasets` (ingest controlled dataset, validated min 2 groups)
+      - `GET /api/fairness/datasets` & `GET /api/fairness/datasets/{id}` (list/retrieve)
+      - `POST /api/fairness/datasets/{id}/audit` (run audit on dataset)
+      - `POST /api/fairness/evaluate` (atomic ingest + direct audit)
+      - `GET /api/fairness/audits` & `GET /api/fairness/audits/{id}` (audit reports)
+      - All endpoints protected by `require_admin`. Ordinary recruiters and public users receive HTTP 403 Forbidden.
+  - **FA-2 (Demographic Parity, Equal Opportunity & Subgroup Recall)**:
+    - **DPD**: Maximum pairwise selection rate disparity across all subgroups ($\max SR_g - \min SR_g$) and per-subgroup difference from reference group ($SR_g - SR_{\text{ref}}$).
+    - **Adverse Impact Ratio (AIR)**: Four-fifths (80%) rule evaluation ($SR_g / SR_{\text{ref}}$), flagging disparities below 0.80.
+    - **EOD**: True Positive Rate (Recall) disparity across subgroups ($\max TPR_g - \min TPR_g$).
+    - **Subgroup Recall**: $TP_g / (TP_g + FN_g)$ calculated per subgroup when positive ground truth instances exist.
+  - **FA-3 (Subgroup Sample Counts & Minimum Sample Warnings)**:
+    - Evaluates observation counts $N_g$ per subgroup with configurable threshold (default `MIN_SAMPLE_SIZE = 30`).
+    - Emits prominent high-variance sampling warning (`has_sample_warning=True`) whenever $N_g < 30$.
+    - Emits overall sample warning if total dataset $N < 30$.
+  - **FA-4 (Missing Ground-Truth Validation & Isolation)**:
+    - **EOD is strictly omitted (returns `None`)** when outcome labels are unavailable or partially missing, with explicit warnings preventing attrition bias.
+    - If a subgroup has zero positive ground-truth instances, its recall is undefined (`None`) and EOD is omitted.
+    - Zero division guards prevent errors on empty groups, 0 selections, or 0 ground truth.
+    - **Complete data isolation**: Demographic evaluation datasets are strictly quarantined from applicant scoring tables (`candidate_responses`, `response_scores`, `session_alignments`) and recruiter reports.
+  - **FA-5 (Controlled Dataset Ingestion & SQL Migration)**:
+    - Pydantic validation rejects records missing both score and prediction, records with blank group names, and scores outside 0–100.
+    - SQL migration [`docs/migrations/phase_c_fairness_evaluation.sql`](file:///c:/Users/purus/OneDrive/Documents/Desktop/AI-ASSISTED%20BEHAVIORAL%20JOB-FIT%20ASSESSMENT/docs/migrations/phase_c_fairness_evaluation.sql) creates `fairness_datasets` and `fairness_audits` tables with RLS policies restricting access to platform administrators.
+  - **Regression Tests — `backend/tests/test_phase_c_fairness.py`** (NEW FILE, 24 tests):
+    - `TestDemographicParityMetrics` (3 tests): known selection rates, continuous scores, Adverse Impact Ratio 80% rule.
+    - `TestEqualOpportunityMetrics` (4 tests): complete ground truth, missing ground truth omits EOD, partial ground truth omits EOD, zero positive outcomes omits EOD.
+    - `TestSampleCountWarnings` (3 tests): N < 30 warning, configurable threshold, overall small sample warning.
+    - `TestEdgeCasesAndZeroDenominators` (4 tests): empty dataset, single group, zero selections, mandatory limitations.
+    - `TestFairnessApiAuthorization` (4 tests): 401 unauthenticated, 403 ordinary recruiter, 200 platform admin, 201 direct evaluate.
+    - `TestFairnessDataIsolation` (2 tests): candidate scoring model isolation, report schema isolation.
+
+  - **Phase D (Recruiter Oversight and Audit Trails — OV-1 to OV-6) — COMPLETE**:
+    - **OV-1 (Sample-Size & Fairness Limitations Warning)**:
+      - Emits sample-size notices when responses < questions or responses < 3.
+      - Emits evidence-quality notices when average similarity confidence < 0.45 or dimension confidence < 0.40.
+      - Emits research-backed fairness caveat clarifying that passing statistical score thresholds does NOT prove absence of bias, and human recruiter judgment is required for all hiring decisions.
+    - **OV-2 (Immutable Audit Logs & Credential Sanitization)**:
+      - Persistent `audit_logs` table (`actor_id`, `actor_role`, `action`, `target_type`, `target_id`, `details`, `ip_address`, `user_agent`, `created_at`).
+      - Service `AuditService` with recursive credential sanitizer `sanitize_audit_details` redacting passwords, tokens, API keys, and authorization headers.
+      - Indexed for actor, target entity, action, and timestamp.
+    - **OV-3 & OV-4 (Recruiter Review State & Tenant Isolation)**:
+      - Additive columns on `session_alignments`: `reviewed_at`, `reviewed_by`, `review_action`, `recruiter_notes`, `override_score`.
+      - Preserves deterministic assessment scores (`overall_score`); human overrides and notes are stored as auditable events rather than silent rewrites.
+      - Enforces tenant isolation: recruiters can only review sessions for jobs they own (`job.recruiter_id == user.id`), with admin bypass.
+    - **OV-5 (POST /api/sessions/{session_id}/review Endpoint)**:
+      - Validates allowed review actions (`'reviewed'`, `'flagged_for_interview'`, `'request_reassessment'`, `'overridden'`, `'completed'`).
+      - Validates authenticated recruiter permissions and job ownership.
+      - Detects and tracks repeated submissions (`is_repeated_review=True`), preserving audit history.
+    - **OV-6 (AssessmentReportPage.jsx UI Enhancements)**:
+      - Displays Framework Snapshot Version badge in candidate header.
+      - Displays Notices & Fairness Caveats warning banner (amber glassmorphism).
+      - Displays Recruiter Oversight Card with current review status, human override score, reviewer identity, and notes.
+      - Interactive review form supporting action selection, score override (0-100), and notes submission with instant optimistic UI update.
+    - **Regression Tests — `backend/tests/test_phase_d_oversight.py`** (NEW FILE, 9 tests):
+      - `test_sanitize_audit_details_redacts_credentials`
+      - `test_log_event_records_and_retrieves`
+      - `test_review_session_success`
+      - `test_review_session_tenant_isolation_forbidden`
+      - `test_review_session_admin_bypass_allowed`
+      - `test_review_session_repeated_submission`
+      - `test_review_session_invalid_action`
+      - `test_review_session_not_found`
+      - `test_report_includes_sample_size_and_fairness_caveat_warnings`
+
 ## Database: Apply Pending SQL
 REQUIRED before deploying to live users:
 Go to Supabase Dashboard > SQL Editor and run:
-1. Lines 622-706: interview_sessions and candidate_responses tables + RLS policies + email_status column (Phase 5)
-2. Lines 708-759: response_scores table + RLS policies (Phase 6)
-3. Lines 760-805: session_alignments table + RLS policies (Phase 7)
-4. Lines 811-960: framework_versions table + dimension/indicator order and status columns + framework_version_id on jobs + RLS policies + Version 1.0 seed snapshot (Phase 11)
-All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS and are idempotent.
+1. `docs/migrations/all_phases_a_b_c_d_consolidated.sql` — contains all schema updates, tables, indexes, and RLS policies for:
+   - Phase A: `interview_sessions.framework_version_id` binding
+   - Phase B: (Zero DDL; uses existing JSONB `response_scores.evidence`)
+   - Phase C: `fairness_datasets`, `fairness_records`, `fairness_audits` tables + admin RLS
+   - Phase D: `session_alignments` review columns (`reviewed_at`, `reviewed_by`, `review_action`, `recruiter_notes`, `override_score`) + `audit_logs` table + RLS
+All statements use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN IF NOT EXISTS` and are strictly idempotent.
 
 ## Admin Account Setup
 To grant an account Platform Administrator privileges:
@@ -366,13 +520,16 @@ To grant an account Platform Administrator privileges:
 3. Refresh the application; the "⚙️ Framework Manager" navigation link will immediately appear.
 
 ## Important Decisions & Final Architecture
-- **Architecture Philosophy**: Hybrid AI + Deterministic Analytics + Version-Controlled Frameworks:
+- **Architecture Philosophy**: Hybrid AI + Deterministic Analytics + Version-Controlled Frameworks + Human Oversight:
   - Generative AI (Groq / `openai/gpt-oss-120b`) is strictly restricted to qualitative tasks: JD requirement extraction and STAR interview question generation.
   - Behavioral Framework is fully administrator-managed with versioning and immutable snapshots.
   - All scoring, indicator matching, confidence ratings, and alignment calculations are 100% deterministic pure Python math. LLMs never calculate, invent, or hallucinate scores.
+  - Evidence text extraction provides explainability via sentence grounding without modifying authoritative scoring math.
+  - Demographic Fairness Audits (DPD, EOD, Subgroup Recall) run exclusively via controlled evaluation datasets in an isolated administrative governance boundary.
+  - Recruiter Oversight & Audit Trails: Human decisions, qualitative notes, and score overrides are auditable events with complete credential sanitization; deterministic model outputs remain preserved.
   - Email Invitations: React → FastAPI → Supabase + Dual Email Engine (Gmail SMTP / Resend API).
 - **Fairness & Ethics**:
-  - Zero collection or utilization of protected/sensitive demographic attributes.
+  - Zero collection or utilization of protected/sensitive demographic attributes in live candidate assessments.
   - Zero psychiatric or clinical mental health diagnosis.
   - Zero automated hiring decisions ("Hire", "Reject", "Select").
   - Mandatory ethical compliance disclaimer displayed on all reports.
@@ -382,29 +539,33 @@ To grant an account Platform Administrator privileges:
 - **Frontend Stack**: Vite 8 + React 19 + Tailwind v4 + React Router v7.
 
 ## Tests
-- 236/236 backend tests passing (Python 3.14.2, pytest 9.1.1):
-  - test_admin_framework.py:     23 tests (NEW Phase 11)
-  - test_health.py:               3 tests
-  - test_jobs.py:                11 tests
-  - test_schemas.py:              8 tests
-  - test_dimensions.py:          10 tests
-  - test_analysis.py:            13 tests
-  - test_questions.py:           19 tests
-  - test_sessions.py:            19 tests
-  - test_email_service.py:       16 tests (Gmail SMTP + Resend success, failure resilience, retry, auth & key security)
-  - test_scoring.py:             55 tests
-  - test_alignment.py:           23 tests
-  - test_reports.py:              9 tests
-  - test_validation_fairness.py: 21 tests
-  - test_rate_limiter.py:         6 tests
-- Frontend: clean production build (84 modules, 0 errors in 966ms)
+- **312/312 backend tests passing** (Python 3.14.2, pytest 9.1.1, 33.93s):
+  - test_phase_d_oversight.py:          9 tests (NEW Phase 12D — OV-1 to OV-6)
+  - test_phase_c_fairness.py:          24 tests (Phase 12C — FA-1 to FA-5)
+  - test_phase_b_evidence.py:          26 tests (Phase 12B — ES-1 to ES-3)
+  - test_phase_a_snapshot_binding.py: 17 tests (Phase 12A — FS-1 to FS-4)
+  - test_admin_framework.py:          23 tests
+  - test_health.py:                    3 tests
+  - test_jobs.py:                     11 tests
+  - test_schemas.py:                   8 tests
+  - test_dimensions.py:               10 tests
+  - test_analysis.py:                 13 tests
+  - test_questions.py:                19 tests
+  - test_sessions.py:                 19 tests
+  - test_email_service.py:            16 tests
+  - test_scoring.py:                  55 tests
+  - test_alignment.py:                23 tests
+  - test_reports.py:                  10 tests
+  - test_validation_fairness.py:      21 tests
+  - test_rate_limiter.py:              6 tests
+- **Frontend**: clean production build (85 modules, 0 errors in 798ms)
 
 ## Remaining Risks & Recommendations
-1. **Supabase SQL Migration**: Run lines 622-960 from `docs/supabase_schema.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates or activating custom frameworks.
+1. **Supabase SQL Migration**: Run `docs/migrations/all_phases_a_b_c_d_consolidated.sql` in the Supabase Dashboard SQL Editor prior to inviting real candidates or activating custom frameworks.
 2. **Reverse Proxy Configuration**: Ensure production ingress / reverse proxy (e.g. Nginx, Cloudflare) sets the `X-Forwarded-For` header accurately for IP rate limiting.
 3. **Gmail App Password Setup**: When using Gmail SMTP (`EMAIL_PROVIDER=smtp`), ensure **2-Step Verification** is enabled on your Google Account and enter your 16-character **App Password** in `SMTP_PASSWORD`.
 4. **Admin Account Promotion**: Use the provided SQL snippet in Supabase SQL Editor to elevate authorized administrators.
 
 ## Project Status
-Admin-Managed Behavioral Framework & Versioning (Phase 11) is COMPLETE, fully tested (236/236 passing tests), and validated with a clean frontend production build.
-
+Phase 12 (Fairness Features) — Phase A (Framework Snapshot Binding), Phase B (Evidence-Based Scoring Explanations), Phase C (Demographic Fairness Evaluation), and Phase D (Recruiter Oversight and Audit Trails) are COMPLETE.
+312/312 backend tests passing (0 regressions). Clean frontend build (85 modules, 0 errors).

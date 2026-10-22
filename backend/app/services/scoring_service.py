@@ -56,16 +56,93 @@ class ScoringService:
     # ── Fetch session ─────────────────────────────────────────────────────────
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        """Return the session row or None."""
+        """Return the session row or None (includes framework_version_id if present)."""
         result = (
             self._db.table("interview_sessions")
-            .select("id, job_id, candidate_name, candidate_email, status, submitted_at")
+            .select(
+                "id, job_id, candidate_name, candidate_email, status, submitted_at, "
+                "framework_version_id"
+            )
             .eq("id", session_id)
             .maybe_single()
             .execute()
         )
         self._raise_if_error(result)
         return result.data
+
+    # ── Resolve frozen framework snapshot ────────────────────────────────────
+
+    def _get_snapshot_for_session(self, session: dict) -> Optional[list]:
+        """
+        Return the dimensions_snapshot list from the framework_version pinned to
+        this session (FS-3).  Returns None if no version is pinned or not found.
+        """
+        fv_id = session.get("framework_version_id")
+        if not fv_id:
+            return None
+        try:
+            result = (
+                self._db.table("framework_versions")
+                .select("dimensions_snapshot")
+                .eq("id", str(fv_id))
+                .limit(1)
+                .execute()
+            )
+            self._raise_if_error(result)
+            rows = result.data or []
+            if not rows:
+                return None
+            snapshot = rows[0].get("dimensions_snapshot")
+            if isinstance(snapshot, list):
+                return snapshot
+            if isinstance(snapshot, str):
+                import json as _json
+                return _json.loads(snapshot)
+        except Exception as exc:
+            logger.warning("Could not load framework snapshot for session scoring: %s", exc)
+        return None
+
+    def _get_indicators_from_snapshot(
+        self,
+        snapshot: list,
+        dimension_id: str,
+        indicator_names: List[str],
+    ) -> tuple[Optional[str], list]:
+        """
+        Resolve dimension_name and indicator objects from a frozen snapshot.
+
+        Returns
+        -------
+        (dimension_name, indicator_objects)
+        where indicator_objects have keys: name, description, example_behaviors.
+        Returns (None, []) if the dimension_id is not found in the snapshot.
+        """
+        # snapshot is a list of dicts: {id, name, indicators: [{name, description, example_behaviors}]}
+        for dim in snapshot:
+            # snapshot may store id as string or UUID
+            if str(dim.get("id", "")) == str(dimension_id):
+                dim_name = dim.get("name", "unknown")
+                ind_map = {
+                    ind.get("name", "").lower(): ind
+                    for ind in dim.get("indicators", [])
+                    if ind.get("name")
+                }
+                indicator_objs = []
+                for raw_name in indicator_names:
+                    if not raw_name or not isinstance(raw_name, str):
+                        continue
+                    name_clean = raw_name.strip()
+                    name_key = name_clean.lower()
+                    if name_key in ind_map:
+                        indicator_objs.append(ind_map[name_key])
+                    else:
+                        indicator_objs.append({
+                            "name": name_clean,
+                            "description": name_clean,
+                            "example_behaviors": "",
+                        })
+                return dim_name, indicator_objs
+        return None, []
 
     # ── Fetch existing scores ─────────────────────────────────────────────────
 
@@ -105,12 +182,18 @@ class ScoringService:
 
     # ── Fetch question with enriched indicator data ───────────────────────────
 
-    def get_question_with_indicators(self, question_id: str) -> Optional[dict]:
+    def get_question_with_indicators(
+        self, question_id: str, snapshot: Optional[list] = None
+    ) -> Optional[dict]:
         """
         Fetch a question row and enrich it with:
-          - dimension_name (from behavioral_dimensions)
+          - dimension_name
           - full indicator objects (name, description, example_behaviors)
-            matched by the indicator names stored in interview_questions.indicators
+
+        When ``snapshot`` is provided (FS-3), indicator and dimension data are
+        resolved from the frozen framework snapshot instead of live DB tables,
+        guaranteeing historical reproducibility.  Falls back to live DB query
+        if the dimension is absent from the snapshot.
         """
         # 1. Fetch the question
         q_result = (
@@ -132,25 +215,42 @@ class ScoringService:
             question["indicator_objects"] = []
             return question
 
-        # 2. Fetch dimension name
+        dimension_id: str = str(question["dimension_id"])
+        indicator_names: List[str] = question["indicators"]
+
+        # FS-3: Try snapshot-based resolution first.
+        if snapshot:
+            dim_name, indicator_objs = self._get_indicators_from_snapshot(
+                snapshot, dimension_id, indicator_names
+            )
+            if dim_name is not None:
+                question["dimension_name"] = dim_name
+                question["indicator_objects"] = indicator_objs
+                return question
+            # Dimension not in snapshot — fall through to live DB.
+            logger.debug(
+                "Dimension %s not found in snapshot; falling back to live DB for question %s.",
+                dimension_id, question_id,
+            )
+
+        # 2. Live DB: fetch dimension name
         dim_result = (
             self._db.table("behavioral_dimensions")
             .select("id, name")
-            .eq("id", question["dimension_id"])
+            .eq("id", dimension_id)
             .maybe_single()
             .execute()
         )
         self._raise_if_error(dim_result)
         question["dimension_name"] = (dim_result.data or {}).get("name", "unknown")
 
-        # 3. Fetch full indicator objects by name (for embedding texts)
-        indicator_names: List[str] = question["indicators"]
+        # 3. Live DB: fetch full indicator objects by name
         indicator_objs = []
         if indicator_names:
             ind_result = (
                 self._db.table("behavioral_indicators")
                 .select("id, name, description, example_behaviors")
-                .eq("dimension_id", question["dimension_id"])
+                .eq("dimension_id", dimension_id)
                 .in_("name", indicator_names)
                 .execute()
             )
@@ -199,10 +299,11 @@ class ScoringService:
 
         Steps:
           1. Fetch all candidate_responses.
-          2. For each response: fetch question + indicators.
-          3. Run analyze_response_safe().
-          4. Upsert results into response_scores.
-          5. Return the list of saved score rows.
+          2. Resolve the frozen framework snapshot for the session (FS-3).
+          3. For each response: fetch question + indicators (snapshot-first, DB fallback).
+          4. Run analyze_response_safe().
+          5. Upsert results into response_scores.
+          6. Return the list of saved score rows.
 
         Returns
         -------
@@ -213,6 +314,17 @@ class ScoringService:
             logger.info("No responses found for session %s — nothing to score.", session_id)
             return []
 
+        # FS-3: Load frozen snapshot once for the session.
+        session = self.get_session(session_id)
+        snapshot: Optional[list] = self._get_snapshot_for_session(session) if session else None
+        if snapshot:
+            logger.debug(
+                "Scoring session %s using frozen framework snapshot (%d dimensions).",
+                session_id, len(snapshot),
+            )
+        else:
+            logger.debug("No framework snapshot for session %s — falling back to live DB.", session_id)
+
         scored_at = datetime.now(timezone.utc).isoformat()
         saved_rows = []
 
@@ -221,7 +333,7 @@ class ScoringService:
             question_id = str(resp["question_id"])
             answer      = resp.get("answer", "")
 
-            question = self.get_question_with_indicators(question_id)
+            question = self.get_question_with_indicators(question_id, snapshot=snapshot)
             if question is None:
                 logger.warning("Question %s not found — skipping response %s", question_id, response_id)
                 continue
@@ -239,7 +351,7 @@ class ScoringService:
                 indicator_texts=indicator_texts,
             )
 
-            # Serialize evidence for JSONB storage
+            # Serialize evidence for JSONB storage (ES-1: include evidence_text)
             evidence_json = [
                 {
                     "indicator_name": e.indicator_name,
@@ -247,6 +359,7 @@ class ScoringService:
                     "score":          e.score,
                     "matched":        e.matched,
                     "level":          e.level,
+                    "evidence_text":  e.evidence_text,   # ES-1: grounding sentence
                 }
                 for e in dim_score.evidence
             ]

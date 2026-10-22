@@ -17,6 +17,7 @@ from app.api import (
     analysis,
     auth,
     dimensions,
+    fairness,
     health,
     jobs,
     questions,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(scoring.router, prefix="/api")
     app.include_router(alignment.router, prefix="/api")
     app.include_router(reports.router, prefix="/api")
+    app.include_router(fairness.router, prefix="/api")
 
     return app
 

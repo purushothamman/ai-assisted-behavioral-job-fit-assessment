@@ -12,7 +12,7 @@ Provides structured, explainable report contracts containing:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -72,6 +72,15 @@ class ReportExecutiveSummary(BaseModel):
     inquiry_prompts:           List[str] = []
 
 
+class RecruiterReviewRead(BaseModel):
+    """Recruiter oversight review record for decision transparency (Phase D)."""
+    reviewed_at:     Optional[datetime] = None
+    reviewed_by:     Optional[Union[UUID, str]] = None
+    review_action:   Optional[str] = None
+    recruiter_notes: Optional[str] = None
+    override_score:  Optional[float] = None
+
+
 class AssessmentReportRead(BaseModel):
     """Comprehensive recruiter assessment report."""
     session_id:         UUID
@@ -86,6 +95,8 @@ class AssessmentReportRead(BaseModel):
     dimension_breakdown:List[ReportDimensionItem] = []
     questions_evidence: List[ReportQuestionItem] = []
     compliance_notice:  str
+    recruiter_review:   Optional[RecruiterReviewRead] = None
+    warnings:           List[str] = []
     metadata:           Dict[str, Any] = {}
     generated_at:       datetime
 

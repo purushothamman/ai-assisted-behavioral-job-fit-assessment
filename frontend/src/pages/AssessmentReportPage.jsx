@@ -28,6 +28,14 @@ export default function AssessmentReportPage() {
   const [error, setError] = useState('')
   const [expandedQuestions, setExpandedQuestions] = useState({})
 
+  // Recruiter review form state (Phase D: OV-4, OV-5, OV-6)
+  const [reviewAction, setReviewAction] = useState('reviewed')
+  const [recruiterNotes, setRecruiterNotes] = useState('')
+  const [overrideScore, setOverrideScore] = useState('')
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState('')
+  const [reviewErrorMsg, setReviewErrorMsg] = useState('')
+
   useEffect(() => {
     if (!sessionId) return
     setLoading(true)
@@ -42,6 +50,18 @@ export default function AssessmentReportPage() {
           })
           setExpandedQuestions(initial)
         }
+        // Sync recruiter review fields if previously reviewed
+        if (res.data?.recruiter_review) {
+          if (res.data.recruiter_review.review_action) {
+            setReviewAction(res.data.recruiter_review.review_action)
+          }
+          if (res.data.recruiter_review.recruiter_notes) {
+            setRecruiterNotes(res.data.recruiter_review.recruiter_notes)
+          }
+          if (res.data.recruiter_review.override_score !== null && res.data.recruiter_review.override_score !== undefined) {
+            setOverrideScore(res.data.recruiter_review.override_score)
+          }
+        }
       })
       .catch(err => {
         setError(err.message || 'Failed to generate assessment report.')
@@ -55,6 +75,38 @@ export default function AssessmentReportPage() {
 
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault()
+    setSubmittingReview(true)
+    setReviewSuccessMsg('')
+    setReviewErrorMsg('')
+
+    try {
+      const payload = {
+        action: reviewAction,
+        notes: recruiterNotes.trim() || null,
+        override_score: overrideScore !== '' && overrideScore !== null ? Number(overrideScore) : null,
+      }
+      const res = await reportsApi.submitReview(sessionId, payload)
+      setReviewSuccessMsg('Recruiter review recorded and auditable event logged.')
+      // Update local report state with review confirmation
+      setReport(prev => ({
+        ...prev,
+        recruiter_review: {
+          reviewed_at: res.data?.reviewed_at || new Date().toISOString(),
+          reviewed_by: res.data?.reviewed_by,
+          review_action: res.data?.review_action || reviewAction,
+          recruiter_notes: res.data?.recruiter_notes || recruiterNotes,
+          override_score: res.data?.override_score ?? (overrideScore !== '' ? Number(overrideScore) : null),
+        }
+      }))
+    } catch (err) {
+      setReviewErrorMsg(err.message || 'Failed to submit recruiter review.')
+    } finally {
+      setSubmittingReview(false)
+    }
   }
 
   if (loading) {
@@ -182,6 +234,13 @@ export default function AssessmentReportPage() {
               Role Evaluated: <strong style={{ color: 'var(--color-text, #f8fafc)' }}>{job_title}</strong>
               {submitted_at && ` · Completed: ${new Date(submitted_at).toLocaleDateString()}`}
             </p>
+            {report.metadata?.framework_version && (
+              <div style={{ marginTop: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#a5b4fc', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', padding: '2px 8px', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span>🔒</span> Framework Snapshot: {report.metadata.framework_version}
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={{ textAlign: 'right' }}>
@@ -240,6 +299,13 @@ export default function AssessmentReportPage() {
                 </span>
                 <span style={{ fontSize: '14px', color: 'var(--color-muted, #94a3b8)' }}>/ 100</span>
               </div>
+              {report.recruiter_review?.override_score !== null && report.recruiter_review?.override_score !== undefined && (
+                <div style={{ marginTop: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#f59e0b', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                    Human Override: {report.recruiter_review.override_score} / 100
+                  </span>
+                </div>
+              )}
             </div>
             <div
               style={{
@@ -310,6 +376,234 @@ export default function AssessmentReportPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Assessment Notices & Fairness Caveats (Phase D: OV-1) */}
+      {report.warnings && report.warnings.length > 0 && (
+        <div
+          style={{
+            background: 'rgba(251,191,36,0.06)',
+            border: '1px solid rgba(251,191,36,0.3)',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            marginBottom: '24px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '18px' }}>⚠️</span>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#fbbf24' }}>
+              Assessment Notices & Fairness Caveats
+            </h3>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '20px', color: '#e2e8f0', fontSize: '13px', lineHeight: 1.6 }}>
+            {report.warnings.map((w, idx) => (
+              <li key={idx} style={{ marginBottom: idx === report.warnings.length - 1 ? 0 : '6px' }}>
+                {w}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Recruiter Oversight & Audit Trail Card (Phase D: OV-4, OV-5, OV-6) */}
+      <div
+        style={{
+          background: 'var(--color-surface, #1e2230)',
+          border: '1px solid var(--color-border, #2d3748)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '24px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '20px' }}>🛡️</span>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text, #f8fafc)' }}>
+                Recruiter Oversight & Review
+              </h2>
+              <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--color-muted, #94a3b8)' }}>
+                Human review, qualitative evaluation notes, and auditable hiring decisions. Original scores are preserved.
+              </p>
+            </div>
+          </div>
+          {report.recruiter_review?.reviewed_at && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  padding: '3px 10px',
+                  borderRadius: '99px',
+                  background: 'rgba(99,102,241,0.18)',
+                  color: '#a5b4fc',
+                }}
+              >
+                Action: {report.recruiter_review.review_action}
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-muted, #94a3b8)' }}>
+                Reviewed: {new Date(report.recruiter_review.reviewed_at).toLocaleString()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Existing Review Record if reviewed */}
+        {report.recruiter_review?.reviewed_at && (
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid var(--color-border, #2d3748)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '20px',
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-muted, #94a3b8)', textTransform: 'uppercase' }}>Review Action</span>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #f8fafc)' }}>
+                  {report.recruiter_review.review_action}
+                </p>
+              </div>
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-muted, #94a3b8)', textTransform: 'uppercase' }}>Reviewed By</span>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', fontFamily: 'monospace', color: '#94a3b8' }}>
+                  {report.recruiter_review.reviewed_by ? String(report.recruiter_review.reviewed_by).slice(0, 8) + '...' : 'Recruiter'}
+                </p>
+              </div>
+              {report.recruiter_review.override_score !== null && report.recruiter_review.override_score !== undefined && (
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-muted, #94a3b8)', textTransform: 'uppercase' }}>Score Override</span>
+                  <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>
+                    {report.recruiter_review.override_score} / 100 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--color-muted, #94a3b8)' }}>(Original: {overallScore})</span>
+                  </p>
+                </div>
+              )}
+            </div>
+            {report.recruiter_review.recruiter_notes && (
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-muted, #94a3b8)', textTransform: 'uppercase' }}>Recruiter Notes</span>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#e2e8f0', lineHeight: 1.5, background: 'rgba(0,0,0,0.15)', padding: '10px 12px', borderRadius: '8px', whiteSpace: 'pre-wrap' }}>
+                  {report.recruiter_review.recruiter_notes}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Review Form */}
+        <form onSubmit={handleReviewSubmit} className="no-print">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text, #f8fafc)', marginBottom: '6px' }}>
+                Oversight Review Action *
+              </label>
+              <select
+                value={reviewAction}
+                onChange={(e) => setReviewAction(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border, #2d3748)',
+                  background: 'var(--color-surface-2, #111827)',
+                  color: 'var(--color-text, #f8fafc)',
+                  fontSize: '13px',
+                }}
+              >
+                <option value="reviewed">Standard Review Completed</option>
+                <option value="flagged_for_interview">Flag for Live Behavioral Interview</option>
+                <option value="request_reassessment">Request Candidate Reassessment</option>
+                <option value="overridden">Override Score / Decision</option>
+                <option value="completed">Candidate Review Finalized</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text, #f8fafc)', marginBottom: '6px' }}>
+                Score Override (Optional, 0–100)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                placeholder={`Leave blank to keep deterministic score (${overallScore})`}
+                value={overrideScore}
+                onChange={(e) => setOverrideScore(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border, #2d3748)',
+                  background: 'var(--color-surface-2, #111827)',
+                  color: 'var(--color-text, #f8fafc)',
+                  fontSize: '13px',
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text, #f8fafc)', marginBottom: '6px' }}>
+              Qualitative Recruiter Notes & Observations
+            </label>
+            <textarea
+              rows="3"
+              placeholder="Document behavioral observations, context for override, interview inquiries, or candidate feedback..."
+              value={recruiterNotes}
+              onChange={(e) => setRecruiterNotes(e.target.value)}
+              maxLength={4000}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border, #2d3748)',
+                background: 'var(--color-surface-2, #111827)',
+                color: 'var(--color-text, #f8fafc)',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                resize: 'vertical',
+              }}
+            />
+          </div>
+
+          {reviewSuccessMsg && (
+            <div style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', color: '#34d399', fontSize: '13px' }}>
+              ✓ {reviewSuccessMsg}
+            </div>
+          )}
+
+          {reviewErrorMsg && (
+            <div style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', color: '#f87171', fontSize: '13px' }}>
+              ✕ {reviewErrorMsg}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button
+              type="submit"
+              disabled={submittingReview}
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                color: '#fff',
+                border: 'none',
+                padding: '9px 20px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: submittingReview ? 'not-allowed' : 'pointer',
+                opacity: submittingReview ? 0.7 : 1,
+                boxShadow: '0 2px 8px rgba(99,102,241,0.25)',
+              }}
+            >
+              {submittingReview ? 'Submitting Review...' : (report.recruiter_review?.reviewed_at ? 'Update Recruiter Review' : 'Save Recruiter Review')}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Side-by-Side Visual Benchmark Comparison Matrix */}

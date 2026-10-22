@@ -16,11 +16,12 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core.config import get_settings
 from app.core.rate_limiter import candidate_submit_limiter, candidate_view_limiter
 from app.core.security import require_recruiter
+from app.schemas.alignment import SessionReviewPayload, SessionReviewRead
 from app.schemas.sessions import (
     PublicQuestion,
     PublicSessionRead,
@@ -341,4 +342,44 @@ def submit_responses(
         "success": True,
         "message": "Assessment submitted successfully. Thank you!",
         "data": [ResponseRead(**r) for r in saved],
+    }
+
+
+# ── Recruiter / Admin: review session (Phase D: OV-2 to OV-5) ──────────────────
+
+@router.post(
+    "/sessions/{session_id}/review",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Recruiter or Admin: record assessment oversight review and notes",
+)
+def review_session(
+    session_id: str,
+    payload: SessionReviewPayload,
+    request: Request,
+    user: dict = Depends(require_recruiter),
+):
+    """
+    Submit a human recruiter oversight review for an interview session.
+    Validates review action, tenant isolation (recruiter owns job or is admin),
+    preserves original assessment scores, records optional override score and notes,
+    detects repeated reviews, and writes an auditable event to audit_logs.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    session_svc = SessionService()
+    review_result = session_svc.review_session(
+        session_id=session_id,
+        reviewer_id=user["id"],
+        reviewer_role=user.get("role", "recruiter"),
+        payload=payload,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    return {
+        "success": True,
+        "message": "Assessment review recorded successfully.",
+        "data": SessionReviewRead(**review_result).model_dump(mode="json"),
     }

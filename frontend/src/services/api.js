@@ -82,14 +82,15 @@ export const questionsApi = {
   delete:   (questionId, jobId)          => api.delete(`/api/questions/${questionId}?job_id=${jobId}`),
 };
 
-// ── Sessions endpoints (Phase 5) ──────────────────────────────────────────────
+// ── Sessions endpoints (Phase 5 & Phase D) ──────────────────────────────────
 export const sessionsApi = {
-  create:  (jobId, payload)  => api.post(`/api/jobs/${jobId}/sessions`, payload),
-  list:    (jobId)           => api.get(`/api/jobs/${jobId}/sessions`),
-  retryEmail: (sessionId)    => api.post(`/api/sessions/${sessionId}/retry-email`),
+  create:       (jobId, payload)       => api.post(`/api/jobs/${jobId}/sessions`, payload),
+  list:         (jobId)                => api.get(`/api/jobs/${jobId}/sessions`),
+  retryEmail:   (sessionId)            => api.post(`/api/sessions/${sessionId}/retry-email`),
+  submitReview: (sessionId, payload)   => api.post(`/api/sessions/${sessionId}/review`, payload),
   // Public — no auth required
-  getByToken:      (token)   => request('GET',  `/api/sessions/${token}`),
-  submitResponses: (token, payload) => request('POST', `/api/sessions/${token}/responses`, payload),
+  getByToken:      (token)             => request('GET',  `/api/sessions/${token}`),
+  submitResponses: (token, payload)    => request('POST', `/api/sessions/${token}/responses`, payload),
 };
 
 // ── Scoring endpoints (Phase 6) ──────────────────────────────────────────────
@@ -105,10 +106,11 @@ export const alignmentApi = {
   listForJob: (jobId)     => api.get(`/api/jobs/${jobId}/alignments`),
 };
 
-// ── Reports endpoints (Phase 8) ──────────────────────────────────────────────
+// ── Reports endpoints (Phase 8 & Phase D) ────────────────────────────────────
 export const reportsApi = {
-  getReport:     (sessionId) => api.get(`/api/sessions/${sessionId}/report`),
-  getJobSummary: (jobId)     => api.get(`/api/jobs/${jobId}/reports/summary`),
+  getReport:     (sessionId)          => api.get(`/api/sessions/${sessionId}/report`),
+  getJobSummary: (jobId)              => api.get(`/api/jobs/${jobId}/reports/summary`),
+  submitReview:  (sessionId, payload) => api.post(`/api/sessions/${sessionId}/review`, payload),
 };
 
 

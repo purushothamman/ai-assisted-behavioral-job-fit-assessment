@@ -170,7 +170,7 @@ class AlignmentService:
         """Fetch previously calculated alignment for a session, or None."""
         result = (
             self._db.table("session_alignments")
-            .select("id, session_id, job_id, overall_score, dimension_alignments, strengths, areas_for_review, metadata, calculated_at")
+            .select("id, session_id, job_id, overall_score, dimension_alignments, strengths, areas_for_review, metadata, calculated_at, reviewed_at, reviewed_by, review_action, recruiter_notes, override_score")
             .eq("session_id", session_id)
             .maybe_single()
             .execute()
@@ -211,6 +211,11 @@ class AlignmentService:
             "areas_for_review":          areas_for_review,
             "metadata":                  meta,
             "calculated_at":             row.get("calculated_at"),
+            "reviewed_at":               row.get("reviewed_at"),
+            "reviewed_by":               row.get("reviewed_by"),
+            "review_action":             row.get("review_action"),
+            "recruiter_notes":           row.get("recruiter_notes"),
+            "override_score":            float(row["override_score"]) if row.get("override_score") is not None else None,
         }
 
     # ── List Alignments for Job ───────────────────────────────────────────────

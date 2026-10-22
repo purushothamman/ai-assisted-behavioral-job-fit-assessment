@@ -65,6 +65,39 @@ class ReportService:
                 return []
         return []
 
+    def _get_framework_version_label(self, framework_version_id: Optional[str]) -> tuple[str, Optional[str]]:
+        """
+        FS-1: Resolve human-readable framework version string from the
+        framework_versions table using the stored FK.  The jobs table only
+        carries the FK (framework_version_id); there are NO version_number or
+        version_name columns on jobs.
+
+        Returns
+        -------
+        (label_str, version_id_str)
+          label_str   e.g. "v2 - Competency Framework 2026"
+          version_id  the UUID as a string, or None
+        """
+        if not framework_version_id:
+            return "v1.0 - Default Behavioral Framework", None
+        try:
+            result = (
+                self._db.table("framework_versions")
+                .select("id, version_number, name")
+                .eq("id", str(framework_version_id))
+                .limit(1)
+                .execute()
+            )
+            self._raise_if_error(result)
+            rows = result.data or []
+            if rows:
+                row = rows[0]
+                label = f"v{row.get('version_number', 1)} - {row.get('name', 'Behavioral Framework')}"
+                return label, str(row["id"])
+        except Exception as exc:
+            logger.warning("Could not resolve framework version label for %s: %s", framework_version_id, exc)
+        return f"v? - Framework {str(framework_version_id)[:8]}", str(framework_version_id)
+
     # ── Fetch raw data ────────────────────────────────────────────────────────
 
     def _get_questions_by_job(self, job_id: str) -> List[dict]:
@@ -293,6 +326,57 @@ class ReportService:
 
         now_utc = datetime.now(timezone.utc)
 
+        # FS-1: Resolve correct framework version label via FK join instead of
+        # reading nonexistent job.framework_version_number / job.framework_version_name.
+        fw_version_id = job.get("framework_version_id") if job else None
+        fw_label, fw_id_str = self._get_framework_version_label(fw_version_id)
+
+        # Phase D (OV-1, OV-4): Recruiter review assembly & warnings
+        recruiter_review = None
+        if alignment and (
+            alignment.get("reviewed_at")
+            or alignment.get("review_action")
+            or alignment.get("recruiter_notes")
+            or alignment.get("override_score") is not None
+        ):
+            recruiter_review = {
+                "reviewed_at": alignment.get("reviewed_at"),
+                "reviewed_by": alignment.get("reviewed_by"),
+                "review_action": alignment.get("review_action"),
+                "recruiter_notes": alignment.get("recruiter_notes"),
+                "override_score": float(alignment["override_score"]) if alignment.get("override_score") is not None else None,
+            }
+
+        report_warnings: List[str] = []
+        tot_q = len(questions)
+        tot_r = len(responses)
+
+        if tot_q > 0 and tot_r < tot_q:
+            report_warnings.append(
+                f"Sample-size notice: Candidate responded to {tot_r} of {tot_q} questions. Missing responses are marked as unassessed."
+            )
+        if tot_r < 3:
+            report_warnings.append(
+                f"Sample-size notice: Only {tot_r} response(s) submitted (minimum recommended for reliable assessment is 3). Interpret competency alignments with caution."
+            )
+
+        if avg_conf < 0.45 and tot_r > 0:
+            report_warnings.append(
+                f"Evidence-quality notice: Low average similarity confidence ({round(avg_conf, 2)}). Text similarity with rubric indicators was below optimal threshold."
+            )
+
+        for dim in dimension_breakdown:
+            d_conf = dim.get("confidence", 0.0)
+            if dim.get("status") == "assessed" and d_conf < 0.40:
+                report_warnings.append(
+                    f"Evidence-quality notice: Dimension '{dim.get('dimension_label')}' scored with low semantic confidence ({round(d_conf, 2)}). Supplemental interview inquiry recommended."
+                )
+
+        report_warnings.append(
+            "Fairness caveat: Model alignment scores and similarity metrics evaluate pattern matching on submitted responses only. "
+            "Passing score thresholds does NOT prove absence of bias. Human recruiter judgment is required for all hiring decisions."
+        )
+
         return {
             "session_id":          UUID(session_id),
             "job_id":              UUID(job_id),
@@ -306,16 +390,16 @@ class ReportService:
             "dimension_breakdown": dimension_breakdown,
             "questions_evidence":  questions_evidence,
             "compliance_notice":   COMPLIANCE_DISCLAIMER,
+            "warnings":            report_warnings,
+            "recruiter_review":    recruiter_review,
             "metadata": {
-                "total_questions": len(questions),
-                "total_responses": len(responses),
-                "total_scores":    len(scores),
-                "framework_version": (
-                    f"v{job.get('framework_version_number', 1)} - {job.get('framework_version_name', 'Default Framework')}"
-                    if job.get("framework_version_id")
-                    else "v1.0 - Default Behavioral Framework"
-                ),
-                "framework_version_id": job.get("framework_version_id"),
+                "total_questions":      len(questions),
+                "total_responses":      len(responses),
+                "total_scores":         len(scores),
+                "framework_version":    fw_label,
+                "framework_version_id": fw_id_str,
+                "warnings":             report_warnings,
+                "recruiter_review":     recruiter_review,
             },
             "generated_at":        now_utc,
         }

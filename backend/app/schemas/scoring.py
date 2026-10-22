@@ -20,12 +20,22 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 
 class IndicatorEvidenceRead(BaseModel):
-    """Serializable evidence for a single behavioral indicator."""
+    """
+    Serializable evidence for a single behavioral indicator.
+
+    evidence_text (ES-1/ES-2)
+        The sentence from the candidate's answer that most closely matched
+        this indicator, selected by cosine similarity.  None for scores
+        generated before Phase B or when no sentence cleared the floor.
+        Must be presented as supporting context only — not as a hiring signal.
+    """
     indicator_name: str
     similarity:     float   # cosine similarity 0.0–1.0
     score:          int     # 0 | 1 | 2
     matched:        bool
     level:          str     # 'none' | 'partial' | 'strong'
+    evidence_text:  Optional[str] = None  # ES-1: grounding sentence
+
 
 
 # ---------------------------------------------------------------------------

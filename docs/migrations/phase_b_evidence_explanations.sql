@@ -1,0 +1,35 @@
+-- =============================================================================
+-- PHASE B — Evidence-Based Scoring Explanations
+-- File: docs/migrations/phase_b_evidence_explanations.sql
+-- =============================================================================
+
+-- Phase B introduces sentence-level behavioral evidence grounding (ES-1 to ES-3).
+-- 
+-- Storage Architecture:
+--   The table `response_scores` already possesses a JSONB column `evidence`.
+--   In Phase B, the objects stored within this JSONB array are enriched with:
+--     "evidence_text": "<exact supporting sentence from candidate response>" (or null)
+--
+-- Schema Compatibility:
+--   1. Zero DDL alterations required: PostgreSQL/Supabase JSONB natively accommodates
+--      additive key-value attributes without table locks or schema migrations.
+--   2. Backward compatibility:
+--      Historical response_score rows created prior to Phase B omit "evidence_text".
+--      The backend schemas (IndicatorEvidenceRead, ReportEvidenceItem) and frontend
+--      components safely default missing or null values to None/null.
+--   3. Historical immutability:
+--      Prior assessment scores, confidences, and indicator levels remain unaltered.
+--
+-- Verification Query (optional inspection in Supabase SQL editor):
+--   SELECT 
+--       id, 
+--       dimension_name, 
+--       normalized_score, 
+--       jsonb_path_query(evidence, '$[*].evidence_text') AS extracted_evidence_texts
+--   FROM response_scores 
+--   WHERE evidence IS NOT NULL 
+--   LIMIT 5;
+
+-- =============================================================================
+-- END PHASE B MIGRATION NOTES
+-- =============================================================================

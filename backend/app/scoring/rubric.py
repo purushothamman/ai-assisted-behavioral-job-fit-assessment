@@ -23,7 +23,7 @@ Confidence:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 # ---------------------------------------------------------------------------
 # Threshold config (tunable without breaking any interface)
@@ -50,12 +50,21 @@ class IndicatorEvidence:
     score           : int   — 0 (none), 1 (partial), 2 (strong)
     matched         : bool  — True if score > 0
     level           : str   — 'none' | 'partial' | 'strong'
+    evidence_text   : str | None
+        ES-1/ES-2: The sentence or text unit from the candidate's answer that
+        most closely matched this indicator.  None when:
+          - the answer failed the quality gate,
+          - no indicators were present, or
+          - the answer is a single unsegmentable unit.
+        Must be treated as supporting context for the recruiter, NOT as a
+        scoring criterion or hiring signal on its own.
     """
     indicator_name: str
     similarity:     float
     score:          int
     matched:        bool
     level:          str
+    evidence_text:  Optional[str] = None  # ES-1: grounding sentence
 
 
 @dataclass
@@ -108,15 +117,24 @@ def level_label(score: int) -> str:
     return {0: "none", 1: "partial", 2: "strong"}.get(score, "none")
 
 
-def build_evidence(indicator_names: List[str], similarities: List[float]) -> List[IndicatorEvidence]:
+def build_evidence(
+    indicator_names: List[str],
+    similarities: List[float],
+    evidence_texts: Optional[List[Optional[str]]] = None,
+) -> List[IndicatorEvidence]:
     """
-    Build a list of IndicatorEvidence records from indicator names and
-    corresponding cosine similarities.
+    Build a list of IndicatorEvidence records from indicator names,
+    cosine similarities, and optional grounding sentence strings.
 
     Parameters
     ----------
-    indicator_names : List[str]  — ordered list of indicator labels
-    similarities    : List[float]  — cosine sims, same order as names
+    indicator_names : List[str]              — ordered list of indicator labels
+    similarities    : List[float]            — cosine sims, same order as names
+    evidence_texts  : List[Optional[str]] | None
+        ES-1/ES-2: Per-indicator best-matching sentence extracted from the
+        candidate's answer.  May be None per entry when no sentence was
+        confidently attributable.  Pass None for the whole list to skip
+        evidence-text population (backwards-compatible).
 
     Returns
     -------
@@ -127,17 +145,24 @@ def build_evidence(indicator_names: List[str], similarities: List[float]) -> Lis
             f"indicator_names ({len(indicator_names)}) and "
             f"similarities ({len(similarities)}) must have the same length."
         )
+    if evidence_texts is not None and len(evidence_texts) != len(indicator_names):
+        raise ValueError(
+            f"evidence_texts ({len(evidence_texts)}) must match "
+            f"indicator_names ({len(indicator_names)}) when provided."
+        )
 
     evidence = []
-    for name, sim in zip(indicator_names, similarities):
+    for idx, (name, sim) in enumerate(zip(indicator_names, similarities)):
         s     = max(0.0, float(sim))         # clip negatives from float noise
         score = score_indicator(s)
+        ev_text = evidence_texts[idx] if evidence_texts else None
         evidence.append(IndicatorEvidence(
             indicator_name=name,
             similarity=round(s, 4),
             score=score,
             matched=score > 0,
             level=level_label(score),
+            evidence_text=ev_text,
         ))
     return evidence
 
@@ -174,10 +199,11 @@ def aggregate_dimension_score(
     dimension_name: str,
     indicator_names: List[str],
     similarities: List[float],
+    evidence_texts: Optional[List[Optional[str]]] = None,
 ) -> DimensionScore:
     """
     Full dimension scoring pipeline:
-      1. Build evidence records per indicator
+      1. Build evidence records per indicator (with optional grounding sentences)
       2. Normalize raw point sum → 0-100
       3. Compute confidence
 
@@ -186,6 +212,9 @@ def aggregate_dimension_score(
     dimension_name  : str
     indicator_names : List[str]   — behavioral indicator labels
     similarities    : List[float] — cosine sims (same order)
+    evidence_texts  : List[Optional[str]] | None
+        ES-2: Per-indicator best-matching sentence.  Passed through to
+        build_evidence() and stored on each IndicatorEvidence.
 
     Returns
     -------
@@ -200,7 +229,7 @@ def aggregate_dimension_score(
             status="no_indicators",
         )
 
-    evidence = build_evidence(indicator_names, similarities)
+    evidence = build_evidence(indicator_names, similarities, evidence_texts)
     raw_sum  = sum(e.score for e in evidence)
     n        = len(evidence)
 
